@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "ChatGPT Finished Notifier",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Notifies you when ChatGPT finishes responding while you are on another tab or window.",
   "permissions": [
     "notifications"
