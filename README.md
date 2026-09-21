@@ -34,4 +34,4 @@ Make sure Chrome is allowed to display system notifications. On Windows 11, chec
 - `content.js` — ChatGPT page observer.
 - `background-core.js` — notification routing helpers.
 - `background.js` — Chrome notification and tab-focus handling.
-- `icons/` — extension and notification icons.
+- The notification icon is embedded directly in `background.js` so the extension has no binary asset dependency.
