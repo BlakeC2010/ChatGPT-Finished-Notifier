@@ -14,7 +14,6 @@
       testId: element.getAttribute('data-testid') || '',
       ariaLabel: element.getAttribute('aria-label') || '',
       title: element.getAttribute('title') || '',
-      // Only control text is inspected. Conversation text is never read.
       text: element.textContent || '',
     };
   }
@@ -24,8 +23,7 @@
   }
 
   function isGenerating() {
-    // Current ChatGPT exposes this stable test ID while a response is streaming.
-    if (document.querySelector(EXAACT_STOP_SELECTOR)) return true;
+    if (document.querySelector(EXACT_STOP_SELECTOR)) return true;
 
     const descriptors = [];
     for (const element of document.querySelectorAll(CONTROL_SELECTOR)) {
@@ -51,9 +49,7 @@
       if (maybePromise && typeof maybePromise.catch === 'function') {
         maybePromise.catch(() => {});
       }
-    } catch (_) {
-      // Extension reloads can temporarily invalidate the content-script context.
-    }
+    } catch (_) {}
   }
 
   const tracker = new core.GenerationTracker({
