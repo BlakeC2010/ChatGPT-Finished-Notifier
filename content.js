@@ -6,7 +6,6 @@
 
   const EXACT_STOP_SELECTOR = '[data-testid="stop-button"]';
   const CONTROL_SELECTOR = 'button, [role="button"]';
-  const OBSERVE_THROTTLE_MS = 75;
   const STABILIZE_MS = 800;
 
   function controlDescriptor(element) {
@@ -73,17 +72,11 @@
 
   tracker.initialize();
 
-  let scheduled = false;
-  function scheduleObservation() {
-    if (scheduled) return;
-    scheduled = true;
-    setTimeout(() => {
-      scheduled = false;
-      tracker.observe();
-    }, OBSERVE_THROTTLE_MS);
+  function observeNow() {
+    tracker.observe();
   }
 
-  const observer = new MutationObserver(scheduleObservation);
+  const observer = new MutationObserver(observeNow);
   observer.observe(document.documentElement, {
     subtree: true,
     childList: true,
@@ -92,9 +85,9 @@
     attributeFilter: ['data-testid', 'aria-label', 'aria-hidden', 'title', 'hidden'],
   });
 
-  document.addEventListener('visibilitychange', scheduleObservation, { passive: true });
-  window.addEventListener('focus', scheduleObservation, { passive: true });
-  window.addEventListener('blur', scheduleObservation, { passive: true });
+  document.addEventListener('visibilitychange', observeNow, { passive: true });
+  window.addEventListener('focus', observeNow, { passive: true });
+  window.addEventListener('blur', observeNow, { passive: true });
 
   window.addEventListener('pagehide', () => {
     observer.disconnect();
