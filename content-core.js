@@ -31,6 +31,57 @@
     return descriptors.some((descriptor) => isStopControlDescriptor(descriptor));
   }
 
+  function delay(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  async function deliverCompletionWithRetry(options) {
+    if (!options || typeof options.send !== 'function') {
+      throw new TypeError('send must be a function');
+    }
+
+    const completionId = String(options.completionId || '').trim();
+    if (!completionId) throw new TypeError('completionId must be a non-empty string');
+
+    const maxAttempts = Number.isInteger(options.maxAttempts) && options.maxAttempts > 0
+      ? options.maxAttempts
+      : 4;
+    const retryDelayMs = Number.isFinite(options.retryDelayMs) && options.retryDelayMs >= 0
+      ? options.retryDelayMs
+      : 500;
+    const ackTimeoutMs = Number.isFinite(options.ackTimeoutMs) && options.ackTimeoutMs > 0
+      ? options.ackTimeoutMs
+      : 1500;
+    const wait = typeof options.wait === 'function' ? options.wait : delay;
+    const message = {
+      type: 'CHATGPT_RESPONSE_COMPLETE',
+      completionId,
+    };
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      let response;
+      let timeoutId;
+
+      try {
+        response = await Promise.race([
+          Promise.resolve(options.send(message)),
+          new Promise((resolve) => {
+            timeoutId = setTimeout(() => resolve(undefined), ackTimeoutMs);
+          }),
+        ]);
+      } catch (_) {
+        response = undefined;
+      } finally {
+        if (timeoutId !== undefined) clearTimeout(timeoutId);
+      }
+
+      if (response && response.ok === true) return true;
+      if (attempt < maxAttempts) await wait(retryDelayMs);
+    }
+
+    return false;
+  }
+
   class GenerationTracker {
     constructor(options) {
       if (!options || typeof options.readGenerating !== 'function') {
@@ -110,6 +161,7 @@
   return {
     isStopControlDescriptor,
     detectGeneratingFromDescriptors,
+    deliverCompletionWithRetry,
     GenerationTracker,
   };
 });
