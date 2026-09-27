@@ -38,4 +38,4 @@ Make sure Chrome is allowed to display system notifications. On Windows 11, chec
 
 ## Reliability
 
-Chrome Manifest V3 service workers normally become inactive while idle. That is expected. Version 1.0.2 gives each completion a stable ID, waits for the background worker to acknowledge that the notification was created, and retries temporary failures or missing acknowledgments. Retries reuse the same notification ID, so they do not create duplicate notifications.
+Chrome Manifest V3 service workers normally become inactive while idle. That is expected. Version 1.0.2 added acknowledged completion delivery with retries. Version 1.0.3 removes the delayed generation-state observation that could be throttled in a background tab, so fast responses are recorded immediately from ChatGPT DOM mutations instead of being missed before a timer fires.
