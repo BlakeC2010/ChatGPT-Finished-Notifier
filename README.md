@@ -30,8 +30,12 @@ Make sure Chrome is allowed to display system notifications. On Windows 11, chec
 ## Files
 
 - `manifest.json` — Manifest V3 configuration.
-- `content-core.js` — completion state machine.
+- `content-core.js` — completion state machine and reliable delivery helper.
 - `content.js` — ChatGPT page observer.
 - `background-core.js` — notification routing helpers.
 - `background.js` — Chrome notification and tab-focus handling.
 - The notification icon is embedded directly in `background.js` so the extension has no binary asset dependency.
+
+## Reliability
+
+Chrome Manifest V3 service workers normally become inactive while idle. That is expected. Version 1.0.2 gives each completion a stable ID, waits for the background worker to acknowledge that the notification was created, and retries temporary failures or missing acknowledgments. Retries reuse the same notification ID, so they do not create duplicate notifications.
