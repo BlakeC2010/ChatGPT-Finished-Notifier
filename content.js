@@ -14,6 +14,7 @@
       testId: element.getAttribute('data-testid') || '',
       ariaLabel: element.getAttribute('aria-label') || '',
       title: element.getAttribute('title') || '',
+      // Only control text is inspected. Conversation text is never read.
       text: element.textContent || '',
     };
   }
@@ -23,6 +24,7 @@
   }
 
   function isGenerating() {
+    // Current ChatGPT exposes this stable test ID while a response is streaming.
     if (document.querySelector(EXACT_STOP_SELECTOR)) return true;
 
     const descriptors = [];
@@ -41,15 +43,23 @@
     return document.hidden || !document.hasFocus();
   }
 
+  function makeCompletionId() {
+    const randomPart = typeof crypto.randomUUID === 'function'
+      ? crypto.randomUUID()
+      : Math.random().toString(36).slice(2, 12);
+    return `${Date.now().toString(36)}-${randomPart}`;
+  }
+
   function sendCompletion() {
-    try {
-      const maybePromise = chrome.runtime.sendMessage({
-        type: 'CHATGPT_RESPONSE_COMPLETE',
-      });
-      if (maybePromise && typeof maybePromise.catch === 'function') {
-        maybePromise.catch(() => {});
-      }
-    } catch (_) {}
+    const completionId = makeCompletionId();
+
+    return core.deliverCompletionWithRetry({
+      completionId,
+      maxAttempts: 4,
+      retryDelayMs: 500,
+      ackTimeoutMs: 1500,
+      send: (message) => chrome.runtime.sendMessage(message),
+    });
   }
 
   const tracker = new core.GenerationTracker({
