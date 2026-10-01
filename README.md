@@ -30,7 +30,7 @@ Make sure Chrome is allowed to display system notifications. On Windows 11, chec
 ## Files
 
 - `manifest.json` — Manifest V3 configuration.
-- `content-core.js` — completion state machine and reliable delivery helper.
+- `content-core.js` — prompt-to-completion state machine and reliable delivery helper.
 - `content.js` — ChatGPT page observer.
 - `background-core.js` — notification routing helpers.
 - `background.js` — Chrome notification and tab-focus handling.
@@ -38,4 +38,4 @@ Make sure Chrome is allowed to display system notifications. On Windows 11, chec
 
 ## Reliability
 
-Chrome Manifest V3 service workers normally become inactive while idle. That is expected. Version 1.0.2 added acknowledged completion delivery with retries. Version 1.0.3 removes the delayed generation-state observation that could be throttled in a background tab, so fast responses are recorded immediately from ChatGPT DOM mutations instead of being missed before a timer fires.
+Chrome Manifest V3 service workers normally become inactive while idle. That is expected. Version 1.1.0 arms the response cycle at the moment you submit a prompt, then confirms completion from ChatGPT generation/completion controls. This avoids relying on catching a very short-lived generation state after the tab has already moved to the background. Acknowledged delivery with retries remains in place, so an idle Manifest V3 service worker is normal and does not need to be kept alive.
