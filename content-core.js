@@ -19,6 +19,7 @@
       .join(' | ');
 
     if (!semanticText) return false;
+    if (semanticText === 'stop') return true;
     if (/\bstop\s+(streaming|generating|generation|responding|response|answering)\b/.test(semanticText)) {
       return true;
     }
@@ -80,6 +81,96 @@
     }
 
     return false;
+  }
+
+  class ResponseCycleTracker {
+    constructor(options) {
+      if (!options || typeof options.readGenerating !== 'function') {
+        throw new TypeError('readGenerating must be a function');
+      }
+      if (typeof options.readCompletionMarkerCount !== 'function') {
+        throw new TypeError('readCompletionMarkerCount must be a function');
+      }
+      if (typeof options.readAway !== 'function') {
+        throw new TypeError('readAway must be a function');
+      }
+      if (typeof options.onComplete !== 'function') {
+        throw new TypeError('onComplete must be a function');
+      }
+
+      this.stabilizeMs = Number.isFinite(options.stabilizeMs) ? options.stabilizeMs : 800;
+      this.setTimer = options.setTimer || setTimeout;
+      this.clearTimer = options.clearTimer || clearTimeout;
+      this.readGenerating = options.readGenerating;
+      this.readCompletionMarkerCount = options.readCompletionMarkerCount;
+      this.readAway = options.readAway;
+      this.onComplete = options.onComplete;
+      this.armed = false;
+      this.sawGenerating = false;
+      this.baselineCompletionCount = 0;
+      this.pendingTimer = null;
+      this.disposed = false;
+    }
+
+    arm() {
+      if (this.disposed || this.armed) return false;
+      this.armed = true;
+      this.sawGenerating = Boolean(this.readGenerating());
+      this.baselineCompletionCount = this.#readCompletionCount();
+      this.#cancelPending();
+      return true;
+    }
+
+    observe() {
+      if (this.disposed || !this.armed) return;
+
+      const generating = Boolean(this.readGenerating());
+      if (generating) {
+        this.sawGenerating = true;
+        this.#cancelPending();
+        return;
+      }
+
+      const hasNewCompletionMarker = this.#readCompletionCount() > this.baselineCompletionCount;
+      if (!this.sawGenerating && !hasNewCompletionMarker) return;
+      if (this.pendingTimer !== null) return;
+
+      this.pendingTimer = this.setTimer(() => {
+        this.pendingTimer = null;
+        if (this.disposed || !this.armed) return;
+
+        if (this.readGenerating()) {
+          this.sawGenerating = true;
+          return;
+        }
+
+        const confirmed = this.sawGenerating
+          || this.#readCompletionCount() > this.baselineCompletionCount;
+        if (!confirmed) return;
+
+        this.armed = false;
+        this.sawGenerating = false;
+        if (this.readAway()) this.onComplete();
+      }, this.stabilizeMs);
+    }
+
+    dispose() {
+      if (this.disposed) return;
+      this.disposed = true;
+      this.#cancelPending();
+      this.armed = false;
+    }
+
+    #readCompletionCount() {
+      const value = Number(this.readCompletionMarkerCount());
+      return Number.isFinite(value) && value >= 0 ? value : 0;
+    }
+
+    #cancelPending() {
+      if (this.pendingTimer === null) return;
+      this.clearTimer(this.pendingTimer);
+      this.pendingTimer = null;
+    }
   }
 
   class GenerationTracker {
@@ -162,6 +253,7 @@
     isStopControlDescriptor,
     detectGeneratingFromDescriptors,
     deliverCompletionWithRetry,
+    ResponseCycleTracker,
     GenerationTracker,
   };
 });
