@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>Response ready</title>
+  <link rel="stylesheet" href="toast.css">
+</head>
+<body>
+  <main id="toast" class="toast" role="button" tabindex="0" aria-label="Open finished ChatGPT response">
+    <div class="status-icon" aria-hidden="true">✓</div>
+    <div class="copy">
+      <div class="eyebrow">ChatGPT Finished Notifier</div>
+      <h1>Response ready</h1>
+      <p>ChatGPT finished responding.</p>
+      <button id="open-chat" type="button">Open chat <span aria-hidden="true">→</span></button>
+    </div>
+    <button id="dismiss" class="dismiss" type="button" aria-label="Dismiss notification">×</button>
+    <div class="timer" aria-hidden="true"></div>
+  </main>
+
+  <script src="background-core.js"></script>
+  <script src="toast.js"></script>
+</body>
+</html>
