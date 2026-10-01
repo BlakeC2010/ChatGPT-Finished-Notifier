@@ -17,7 +17,7 @@ Send a message on `https://chatgpt.com/`, then switch to another tab or window. 
 
 Click the notification to return to the exact ChatGPT tab that produced it.
 
-The extension intentionally does not notify when you are already looking at that ChatGPT tab.
+The extension intentionally does not notify while the ChatGPT tab is visible, even if you click another window or monitor. It notifies when that ChatGPT tab is hidden or in the background.
 
 ## Privacy
 
@@ -38,4 +38,4 @@ Make sure Chrome is allowed to display system notifications. On Windows 11, chec
 
 ## Reliability
 
-Chrome Manifest V3 service workers normally become inactive while idle. That is expected. Version 1.1.0 arms the response cycle at the moment you submit a prompt, then confirms completion from ChatGPT generation/completion controls. This avoids relying on catching a very short-lived generation state after the tab has already moved to the background. Acknowledged delivery with retries remains in place, so an idle Manifest V3 service worker is normal and does not need to be kept alive.
+Chrome Manifest V3 service workers normally become inactive while idle. That is expected. Version 1.1.0 arms the response cycle at the moment you submit a prompt, then confirms completion from ChatGPT generation/completion controls. This avoids relying on catching a very short-lived generation state after the tab has already moved to the background. Acknowledged delivery with retries remains in place, so an idle Manifest V3 service worker is normal and does not need to be kept alive. Version 1.1.1 uses page visibility rather than window focus, so a ChatGPT tab that remains visible on another monitor does not produce a notification just because you clicked elsewhere.
