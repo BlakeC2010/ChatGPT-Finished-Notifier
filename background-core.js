@@ -6,6 +6,7 @@
   'use strict';
 
   const PREFIX = 'chatgpt-done';
+  const VALID_NOTIFICATION_MODES = new Set(['auto', 'browser', 'system']);
 
   function makeNotificationId(tabId, nonce) {
     if (!Number.isInteger(tabId) || tabId < 0) {
@@ -28,8 +29,41 @@
     return { tabId };
   }
 
+  function normalizeNotificationMode(mode) {
+    return VALID_NOTIFICATION_MODES.has(mode) ? mode : 'auto';
+  }
+
+  function chooseDeliveryMode(mode, chromeFocused) {
+    const normalized = normalizeNotificationMode(mode);
+    if (normalized === 'browser' || normalized === 'system') return normalized;
+    return chromeFocused ? 'browser' : 'system';
+  }
+
+  function computeToastBounds(anchorWindow, width = 400, height = 150, margin = 18) {
+    const result = { width, height };
+    if (!anchorWindow || !Number.isFinite(anchorWindow.left) || !Number.isFinite(anchorWindow.top)
+      || !Number.isFinite(anchorWindow.width)) {
+      return result;
+    }
+
+    result.left = Math.round(anchorWindow.left + anchorWindow.width - width - margin);
+    result.top = Math.round(anchorWindow.top + margin);
+    return result;
+  }
+
+  function parseTargetTabId(value) {
+    const text = String(value ?? '').trim();
+    if (!/^\d+$/.test(text)) return null;
+    const tabId = Number(text);
+    return Number.isSafeInteger(tabId) && tabId >= 0 ? tabId : null;
+  }
+
   return {
     makeNotificationId,
     parseNotificationId,
+    normalizeNotificationMode,
+    chooseDeliveryMode,
+    computeToastBounds,
+    parseTargetTabId,
   };
 });
