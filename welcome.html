@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>ChatGPT Finished Notifier</title>
+  <link rel="stylesheet" href="welcome.css">
+</head>
+<body>
+  <main class="shell">
+    <section class="hero" aria-labelledby="page-title">
+      <div class="brand-row">
+        <div class="brand-mark" aria-hidden="true">✓</div>
+        <span>ChatGPT Finished Notifier</span>
+      </div>
+      <p class="eyebrow">Installed successfully</p>
+      <h1 id="page-title">Thanks for installing.</h1>
+      <p class="lede">Choose how you want to be notified when a ChatGPT response finishes while that chat is hidden.</p>
+    </section>
+
+    <section class="panel" aria-labelledby="notification-heading">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Notification style</p>
+          <h2 id="notification-heading">Pick what fits your workflow</h2>
+        </div>
+        <span class="recommended-badge">Auto recommended</span>
+      </div>
+
+      <div class="mode-grid">
+        <label class="mode-card">
+          <input type="radio" name="notificationMode" value="auto" checked>
+          <span class="radio-dot" aria-hidden="true"></span>
+          <span class="mode-copy">
+            <strong>Auto</strong>
+            <span>Use the custom Chrome toast while Chrome is active. Use a system notification when you are in another app.</span>
+          </span>
+          <span class="mode-pill">Recommended</span>
+        </label>
+
+        <label class="mode-card">
+          <input type="radio" name="notificationMode" value="browser">
+          <span class="radio-dot" aria-hidden="true"></span>
+          <span class="mode-copy">
+            <strong>Browser toast</strong>
+            <span>Always use the cleaner in-Chrome notification window. It is not blocked by Windows Do Not Disturb.</span>
+          </span>
+        </label>
+
+        <label class="mode-card">
+          <input type="radio" name="notificationMode" value="system">
+          <span class="radio-dot" aria-hidden="true"></span>
+          <span class="mode-copy">
+            <strong>System notification</strong>
+            <span>Always use the normal Windows or macOS notification center.</span>
+          </span>
+        </label>
+      </div>
+
+      <div class="actions">
+        <button id="test-notification" type="button">Send a test notification</button>
+        <span id="status" class="status" aria-live="polite">Your choice saves automatically.</span>
+      </div>
+    </section>
+
+    <section class="info-grid" aria-label="Extension details">
+      <article class="info-card">
+        <span class="info-icon" aria-hidden="true">◎</span>
+        <div>
+          <strong>Multi-monitor aware</strong>
+          <p>If the ChatGPT tab is still visible on any monitor, the extension stays quiet.</p>
+        </div>
+      </article>
+      <article class="info-card">
+        <span class="info-icon" aria-hidden="true">↗</span>
+        <div>
+          <strong>One-click return</strong>
+          <p>Click a notification to jump back to the exact chat that finished.</p>
+        </div>
+      </article>
+      <article class="info-card">
+        <span class="info-icon" aria-hidden="true">◇</span>
+        <div>
+          <strong>Private by design</strong>
+          <p>Your prompts and responses are never read, stored, or sent anywhere by this extension.</p>
+        </div>
+      </article>
+    </section>
+
+    <p class="footnote">You can reopen this page later from the extension's Options page.</p>
+  </main>
+
+  <script src="background-core.js"></script>
+  <script src="welcome.js"></script>
+</body>
+</html>
