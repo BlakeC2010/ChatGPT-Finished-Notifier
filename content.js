@@ -61,7 +61,7 @@
   }
 
   function isAway() {
-    return document.hidden || !document.hasFocus();
+    return document.hidden;
   }
 
   function makeCompletionId() {
