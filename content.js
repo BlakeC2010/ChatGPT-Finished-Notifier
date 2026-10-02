@@ -4,13 +4,15 @@
   const core = globalThis.ChatGPTNotifierCore;
   const providers = globalThis.AIChatProviderProfiles;
   if (!core || !providers) return;
+  if (globalThis.__AI_CHAT_NOTIFICATIONS_CONTENT_LOADED__) return;
+  globalThis.__AI_CHAT_NOTIFICATIONS_CONTENT_LOADED__ = true;
 
   const hostname = typeof location === 'object' && location ? location.hostname : 'chatgpt.com';
   const profile = providers.getProfile(hostname);
   if (!profile) return;
 
   const CONTROL_SELECTOR = 'button, [role="button"]';
-  const GENERIC_STOP_SELECTORS = [
+  const GENERIC_STOP_SELECTORS = profile.provider === 'ChatGPT' ? [] : [
     'button[aria-label*="Stop" i]',
     '[role="button"][aria-label*="Stop" i]',
     '[data-testid*="stop" i]',
@@ -23,13 +25,7 @@
     '[data-testid*="send" i]',
     '[data-test-id*="send" i]',
   ];
-  const GENERIC_COMPLETION_SELECTORS = [
-    'button[aria-label="Copy"]',
-    'button[aria-label*="Copy response" i]',
-    'button[aria-label*="Copy answer" i]',
-    '[data-testid*="copy" i]',
-    '[data-test-id*="copy" i]',
-  ];
+  const GENERIC_COMPLETION_SELECTORS = [];
   const GENERIC_PROMPT_SELECTORS = [
     'textarea',
     '[contenteditable="true"][role="textbox"]',
@@ -52,9 +48,8 @@
   }
 
   function isUsableControl(element) {
-    return Boolean(element)
-      && !element.hidden
-      && element.getAttribute('aria-hidden') !== 'true'
+    const readStyle = typeof getComputedStyle === 'function' ? getComputedStyle : null;
+    return core.isElementVisible(element, readStyle)
       && element.getAttribute('aria-disabled') !== 'true'
       && element.disabled !== true;
   }
