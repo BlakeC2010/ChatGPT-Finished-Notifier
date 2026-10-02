@@ -21,12 +21,20 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: package-extension
+  cancel-in-progress: true
+
 jobs:
   package:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+
+      - name: Sync latest main
+        shell: bash
+        run: git pull --rebase origin main
 
       - name: Build Chrome extension ZIP
         shell: bash
