@@ -3,9 +3,17 @@
 const core = globalThis.ChatGPTNotifierBackgroundCore;
 const params = new URLSearchParams(location.search);
 const tabId = core.parseTargetTabId(params.get('tab'));
+const provider = String(params.get('provider') || '').trim();
 const toast = document.querySelector('#toast');
 const openButton = document.querySelector('#open-chat');
 const dismissButton = document.querySelector('#dismiss');
+const responseTitle = document.querySelector('#response-title');
+const responseMessage = document.querySelector('#response-message');
+
+if (provider && responseTitle && responseMessage) {
+  responseTitle.textContent = provider + ' response ready';
+  responseMessage.textContent = provider + ' finished responding.';
+}
 
 function openChat() {
   if (tabId === null) {
