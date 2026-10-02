@@ -1,0 +1,26 @@
+name: Test Extension
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Run tests
+        shell: bash
+        run: |
+          set -e
+          for test_file in tests/*.test.js; do
+            echo "== $test_file =="
+            node "$test_file"
+          done
