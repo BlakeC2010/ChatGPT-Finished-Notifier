@@ -7,6 +7,12 @@ const NOTIFICATION_ICON = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAIAAAAC
 const TOAST_WIDTH = 400;
 const TOAST_HEIGHT = 150;
 const TOAST_MARGIN = 18;
+const KNOWN_PROVIDERS = new Set(['ChatGPT', 'Claude', 'Gemini', 'Grok', 'Kimi', 'Meta AI']);
+
+function cleanProvider(provider) {
+  const value = String(provider || '').trim();
+  return KNOWN_PROVIDERS.has(value) ? value : '';
+}
 
 function clearNotification(notificationId) {
   chrome.notifications.clear(notificationId, () => {
@@ -28,7 +34,22 @@ function focusTab(tabId, callback) {
   });
 }
 
-function createSystemNotification(tabId, completionId, callback) {
+function notificationCopy(provider) {
+  const name = cleanProvider(provider);
+  if (!name) {
+    return {
+      title: 'Response ready',
+      message: 'Your AI chat finished responding.',
+    };
+  }
+
+  return {
+    title: name + ' response ready',
+    message: name + ' finished responding.',
+  };
+}
+
+function createSystemNotification(tabId, completionId, provider, callback) {
   let notificationId;
   try {
     notificationId = core.makeNotificationId(tabId, completionId);
@@ -37,11 +58,12 @@ function createSystemNotification(tabId, completionId, callback) {
     return;
   }
 
+  const copy = notificationCopy(provider);
   chrome.notifications.create(notificationId, {
     type: 'basic',
     iconUrl: NOTIFICATION_ICON,
-    title: 'Response ready',
-    message: 'ChatGPT finished responding.',
+    title: copy.title,
+    message: copy.message,
     contextMessage: 'Click to return to your chat',
     buttons: [{ title: 'Open chat' }],
   }, () => {
@@ -49,9 +71,11 @@ function createSystemNotification(tabId, completionId, callback) {
   });
 }
 
-function createBrowserToast(tabId, anchorWindow, callback) {
+function createBrowserToast(tabId, provider, anchorWindow, callback) {
   const bounds = core.computeToastBounds(anchorWindow, TOAST_WIDTH, TOAST_HEIGHT, TOAST_MARGIN);
-  const url = `${chrome.runtime.getURL('toast.html')}?tab=${encodeURIComponent(tabId)}`;
+  const name = cleanProvider(provider);
+  let url = chrome.runtime.getURL('toast.html') + '?tab=' + encodeURIComponent(tabId);
+  if (name) url += '&provider=' + encodeURIComponent(name);
 
   chrome.windows.create({
     url,
@@ -63,7 +87,7 @@ function createBrowserToast(tabId, anchorWindow, callback) {
   });
 }
 
-function deliverNotification(tabId, completionId, requestedMode, callback) {
+function deliverNotification(tabId, completionId, requestedMode, provider, callback) {
   chrome.storage.sync.get({ notificationMode: 'auto' }, (settings) => {
     const storedMode = settings && settings.notificationMode;
     const mode = core.normalizeNotificationMode(requestedMode || storedMode);
@@ -75,17 +99,17 @@ function deliverNotification(tabId, completionId, requestedMode, callback) {
 
       if (deliveryMode === 'browser') {
         const anchorWindow = focusedWindow || normalWindows[0] || null;
-        createBrowserToast(tabId, anchorWindow, (ok) => {
+        createBrowserToast(tabId, provider, anchorWindow, (ok) => {
           if (ok || mode !== 'auto') {
             callback(ok);
             return;
           }
-          createSystemNotification(tabId, completionId, callback);
+          createSystemNotification(tabId, completionId, provider, callback);
         });
         return;
       }
 
-      createSystemNotification(tabId, completionId, callback);
+      createSystemNotification(tabId, completionId, provider, callback);
     });
   });
 }
@@ -111,8 +135,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (!sender.tab || !Number.isInteger(sender.tab.id)) return false;
 
   if (message.type === 'TEST_NOTIFICATION') {
-    const completionId = `test-${Date.now().toString(36)}`;
-    deliverNotification(sender.tab.id, completionId, message.mode, (ok) => sendResponse({ ok }));
+    const completionId = 'test-' + Date.now().toString(36);
+    deliverNotification(sender.tab.id, completionId, message.mode, '', (ok) => sendResponse({ ok }));
     return true;
   }
 
@@ -126,7 +150,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return false;
   }
 
-  deliverNotification(sender.tab.id, completionId, null, (ok) => sendResponse({ ok }));
+  deliverNotification(sender.tab.id, completionId, null, message.provider, (ok) => sendResponse({ ok }));
   return true;
 });
 
