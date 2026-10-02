@@ -6,36 +6,41 @@
   if (!core || !providers) return;
 
   const hostname = typeof location === 'object' && location ? location.hostname : 'chatgpt.com';
-  const profile = providers.getProfile(hostname) || providers.getProfile('chatgpt.com');
+  const profile = providers.getProfile(hostname);
   if (!profile) return;
 
   const CONTROL_SELECTOR = 'button, [role="button"]';
   const GENERIC_STOP_SELECTORS = [
-    'button[aria-label^="Stop"]',
-    '[role="button"][aria-label^="Stop"]',
-    '[data-testid*="stop"]',
-    '[data-test-id*="stop"]',
+    'button[aria-label*="Stop" i]',
+    '[role="button"][aria-label*="Stop" i]',
+    '[data-testid*="stop" i]',
+    '[data-test-id*="stop" i]',
   ];
   const GENERIC_SEND_SELECTORS = [
-    'button[aria-label^="Send"]',
-    'button[aria-label^="Submit"]',
+    'button[aria-label*="Send" i]',
+    'button[aria-label*="Submit" i]',
     'button[type="submit"]',
-    '[data-testid*="send"]',
-    '[data-test-id*="send"]',
+    '[data-testid*="send" i]',
+    '[data-test-id*="send" i]',
   ];
   const GENERIC_COMPLETION_SELECTORS = [
-    'button[aria-label^="Copy"]',
-    '[role="button"][aria-label^="Copy"]',
-    '[data-testid*="copy"]',
-    '[data-test-id*="copy"]',
+    'button[aria-label="Copy"]',
+    'button[aria-label*="Copy response" i]',
+    'button[aria-label*="Copy answer" i]',
+    '[data-testid*="copy" i]',
+    '[data-test-id*="copy" i]',
   ];
-  const GENERIC_PROMPT_SELECTORS = ['textarea', '[contenteditable="true"]'];
+  const GENERIC_PROMPT_SELECTORS = [
+    'textarea',
+    '[contenteditable="true"][role="textbox"]',
+    '[contenteditable="true"]',
+  ];
 
-  const STOP_SELECTOR = [...profile.stop, ...GENERIC_STOP_SELECTORS].join(', ');
+  const STOP_SELECTOR = [...profile.generating, ...GENERIC_STOP_SELECTORS].join(', ');
   const SEND_SELECTOR = [...profile.send, ...GENERIC_SEND_SELECTORS].join(', ');
   const COMPLETION_MARKER_SELECTOR = [...profile.completion, ...GENERIC_COMPLETION_SELECTORS].join(', ');
   const PROMPT_SELECTOR = [...profile.prompt, ...GENERIC_PROMPT_SELECTORS].join(', ');
-  const STABILIZE_MS = 800;
+  const STABILIZE_MS = 1000;
 
   function controlDescriptor(element) {
     return {
@@ -54,8 +59,16 @@
       && element.disabled !== true;
   }
 
+  function anyUsableMatch(selector) {
+    if (!selector) return false;
+    for (const element of document.querySelectorAll(selector)) {
+      if (isUsableControl(element)) return true;
+    }
+    return false;
+  }
+
   function isGenerating() {
-    if (document.querySelector(STOP_SELECTOR)) return true;
+    if (anyUsableMatch(STOP_SELECTOR)) return true;
 
     const descriptors = [];
     for (const element of document.querySelectorAll(CONTROL_SELECTOR)) {
@@ -178,7 +191,18 @@
     childList: true,
     characterData: true,
     attributes: true,
-    attributeFilter: ['data-testid', 'data-test-id', 'aria-label', 'aria-hidden', 'aria-disabled', 'title', 'hidden', 'disabled', 'class'],
+    attributeFilter: [
+      'data-testid',
+      'data-test-id',
+      'aria-label',
+      'aria-hidden',
+      'aria-disabled',
+      'aria-busy',
+      'title',
+      'hidden',
+      'disabled',
+      'class',
+    ],
   });
 
   document.addEventListener('visibilitychange', observeNow, { passive: true });
