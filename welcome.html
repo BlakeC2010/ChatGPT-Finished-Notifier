@@ -8,88 +8,80 @@
   <link rel="stylesheet" href="welcome.css">
 </head>
 <body>
-  <main class="shell">
-    <section class="hero" aria-labelledby="page-title">
-      <div class="brand-row">
-        <div class="brand-mark" aria-hidden="true">✓</div>
+  <main class="page">
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-icon" aria-hidden="true">✓</span>
         <span>AI Chat Notifications</span>
       </div>
-      <p class="eyebrow">Installed successfully</p>
-      <h1 id="page-title">Thanks for installing.</h1>
-      <p class="lede">Choose how you want to be notified when a supported AI chat finishes while that tab is hidden.</p>
-      <p class="footnote">Supports ChatGPT, Claude, and Gemini.</p>
+      <span class="version">v1.3.1</span>
+    </header>
+
+    <section class="intro">
+      <h1>Notifications for your AI chats.</h1>
+      <p>Pick how you want alerts delivered when a response finishes in a hidden tab.</p>
     </section>
 
-    <section class="panel" aria-labelledby="notification-heading">
-      <div class="section-heading">
+    <section class="settings-card" aria-labelledby="notification-heading">
+      <div class="section-title">
         <div>
-          <p class="eyebrow">Notification style</p>
-          <h2 id="notification-heading">Pick what fits your workflow</h2>
+          <h2 id="notification-heading">Notification method</h2>
+          <p>You can change this anytime.</p>
         </div>
-        <span class="recommended-badge">Auto recommended</span>
       </div>
 
-      <div class="mode-grid">
-        <label class="mode-card">
+      <div class="mode-list">
+        <label class="mode-row">
           <input type="radio" name="notificationMode" value="auto" checked>
-          <span class="radio-dot" aria-hidden="true"></span>
-          <span class="mode-copy">
+          <span class="radio" aria-hidden="true"></span>
+          <span class="mode-text">
             <strong>Auto</strong>
-            <span>Use the custom Chrome toast while Chrome is active. Use a system notification when you are in another app.</span>
+            <span>Browser alert in Chrome, system alert when Chrome is in the background.</span>
           </span>
-          <span class="mode-pill">Recommended</span>
+          <span class="recommended">Recommended</span>
         </label>
 
-        <label class="mode-card">
+        <label class="mode-row">
           <input type="radio" name="notificationMode" value="browser">
-          <span class="radio-dot" aria-hidden="true"></span>
-          <span class="mode-copy">
-            <strong>Browser toast</strong>
-            <span>Always use the cleaner in-Chrome notification window. It is not blocked by Windows Do Not Disturb.</span>
+          <span class="radio" aria-hidden="true"></span>
+          <span class="mode-text">
+            <strong>Browser alert</strong>
+            <span>Always use the extension's small Chrome popup.</span>
           </span>
         </label>
 
-        <label class="mode-card">
+        <label class="mode-row">
           <input type="radio" name="notificationMode" value="system">
-          <span class="radio-dot" aria-hidden="true"></span>
-          <span class="mode-copy">
+          <span class="radio" aria-hidden="true"></span>
+          <span class="mode-text">
             <strong>System notification</strong>
-            <span>Always use the normal Windows or macOS notification center.</span>
+            <span>Always use Windows or macOS notifications.</span>
           </span>
         </label>
       </div>
 
-      <div class="actions">
-        <button id="test-notification" type="button">Send a test notification</button>
-        <span id="status" class="status" aria-live="polite">Your choice saves automatically.</span>
+      <div class="test-row">
+        <button id="test-notification" type="button">Send test notification</button>
+        <span id="status" class="status" aria-live="polite">Settings save automatically.</span>
       </div>
     </section>
 
-    <section class="info-grid" aria-label="Extension details">
-      <article class="info-card">
-        <span class="info-icon" aria-hidden="true">◎</span>
-        <div>
-          <strong>Multi-monitor aware</strong>
-          <p>If the AI chat tab is still visible on any monitor, the extension stays quiet.</p>
-        </div>
-      </article>
-      <article class="info-card">
-        <span class="info-icon" aria-hidden="true">↗</span>
-        <div>
-          <strong>One-click return</strong>
-          <p>Click a notification to jump back to the exact chat that finished.</p>
-        </div>
-      </article>
-      <article class="info-card">
-        <span class="info-icon" aria-hidden="true">◇</span>
-        <div>
-          <strong>Private by design</strong>
-          <p>Your prompts and responses are never read, stored, or sent anywhere by this extension.</p>
-        </div>
-      </article>
+    <section class="details">
+      <div class="detail-row">
+        <span>Supported</span>
+        <strong>ChatGPT · Claude · Gemini</strong>
+      </div>
+      <div class="detail-row">
+        <span>When it alerts</span>
+        <strong>Only when the chat tab is hidden</strong>
+      </div>
+      <div class="detail-row">
+        <span>Privacy</span>
+        <strong>Prompts and responses stay local</strong>
+      </div>
     </section>
 
-    <p class="footnote">You can reopen this page later from the extension's Options page.</p>
+    <p class="footer-note">Clicking a notification takes you back to the exact tab that finished.</p>
   </main>
 
   <script src="background-core.js"></script>
