@@ -63,7 +63,7 @@ function send(h, message, sender = { tab: { id: 42 } }) {
     const h = buildHarness();
     assert.ok(h.listeners.installed, 'install listener should be registered');
     assert.equal(h.calls.scriptsInjected.length, 1);
-    assert.deepEqual(h.calls.scriptsInjected[0].files, ['providers.js', 'content-core.js', 'content.js']);
+    assert.deepEqual(Array.from(h.calls.scriptsInjected[0].files), ['providers.js', 'content-core.js', 'content.js']);
     h.listeners.installed({ reason: 'install' });
     assert.equal(h.calls.tabsCreated.length, 1);
     assert.equal(h.calls.tabsCreated[0].url, 'chrome-extension://test/welcome.html');
