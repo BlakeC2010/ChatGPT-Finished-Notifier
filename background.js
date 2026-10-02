@@ -9,6 +9,34 @@ const TOAST_HEIGHT = 150;
 const TOAST_MARGIN = 18;
 const KNOWN_PROVIDERS = new Set(['ChatGPT', 'Claude', 'Gemini']);
 
+const SUPPORTED_URL_PATTERNS = [
+  'https://chatgpt.com/*',
+  'https://claude.ai/*',
+  'https://gemini.google.com/*',
+];
+const CONTENT_SCRIPT_FILES = ['providers.js', 'content-core.js', 'content.js'];
+
+function ensureContentScriptsOnOpenTabs() {
+  if (!chrome.tabs || typeof chrome.tabs.query !== 'function') return;
+  if (!chrome.scripting || typeof chrome.scripting.executeScript !== 'function') return;
+
+  chrome.tabs.query({ url: SUPPORTED_URL_PATTERNS }, (tabs) => {
+    if (chrome.runtime.lastError || !Array.isArray(tabs)) return;
+
+    for (const tab of tabs) {
+      if (!tab || !Number.isInteger(tab.id)) continue;
+      chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        files: CONTENT_SCRIPT_FILES,
+      }, () => {
+        void chrome.runtime.lastError;
+      });
+    }
+  });
+}
+
+ensureContentScriptsOnOpenTabs();
+
 function cleanProvider(provider) {
   const value = String(provider || '').trim();
   return KNOWN_PROVIDERS.has(value) ? value : '';
