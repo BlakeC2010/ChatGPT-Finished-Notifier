@@ -25,13 +25,16 @@ assert.equal(providers.getProfile('example.com'), null);
 assert.ok(claude.prompt.some((selector) => selector.includes('ProseMirror')));
 assert.ok(claude.send.some((selector) => selector.includes('send-button')));
 assert.ok(claude.generating.some((selector) => selector.includes('stop-button')));
+assert.ok(claude.completion.some((selector) => selector.includes('font-claude-response')));
 assert.ok(claude.completion.some((selector) => selector.includes('action-bar-copy')));
 
 assert.ok(gemini.prompt.some((selector) => selector.includes('ql-editor')));
 assert.ok(gemini.prompt.some((selector) => selector.includes('Enter a prompt here')));
 assert.ok(gemini.send.some((selector) => selector.includes('Send message')));
 assert.ok(gemini.generating.some((selector) => selector.includes('aria-busy')));
+assert.ok(gemini.completion.some((selector) => selector.includes('model-response')));
 assert.ok(gemini.completion.some((selector) => selector.includes('Copy')));
+assert.ok(chatgpt.completion.some((selector) => selector.includes('data-message-author-role')));
 
 assert.equal(providers.isSendControlDescriptor({ ariaLabel: 'Send message' }), true);
 assert.equal(providers.isCompletionMarkerDescriptor({ ariaLabel: 'Copy response' }), true);
