@@ -8,12 +8,12 @@
   <link rel="stylesheet" href="toast.css">
 </head>
 <body>
-  <main id="toast" class="toast" role="button" tabindex="0" aria-label="Open finished ChatGPT response">
+  <main id="toast" class="toast" role="button" tabindex="0" aria-label="Open finished AI response">
     <div class="status-icon" aria-hidden="true">✓</div>
     <div class="copy">
-      <div class="eyebrow">ChatGPT Finished Notifier</div>
-      <h1>Response ready</h1>
-      <p>ChatGPT finished responding.</p>
+      <div class="eyebrow">AI Chat Notifications</div>
+      <h1 id="response-title">Response ready</h1>
+      <p id="response-message">Your AI response is ready.</p>
       <button id="open-chat" type="button">Open chat <span aria-hidden="true">→</span></button>
     </div>
     <button id="dismiss" class="dismiss" type="button" aria-label="Dismiss notification">×</button>
