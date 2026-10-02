@@ -61,6 +61,29 @@ run('recognizes aria-label Stop as an active stop control', () => {
   assert.equal(core.isStopControlDescriptor({ ariaLabel: 'Stop' }), true);
 });
 
+run('ignores controls that remain in the DOM but are visually hidden', () => {
+  const hiddenByLayout = {
+    hidden: false,
+    getAttribute() { return null; },
+    getClientRects() { return []; },
+  };
+  assert.equal(core.isElementVisible(hiddenByLayout), false);
+
+  const hiddenByStyle = {
+    hidden: false,
+    getAttribute() { return null; },
+    getClientRects() { return [{}]; },
+  };
+  assert.equal(core.isElementVisible(hiddenByStyle, () => ({ display: 'none', visibility: 'visible' })), false);
+
+  const visible = {
+    hidden: false,
+    getAttribute() { return null; },
+    getClientRects() { return [{}]; },
+  };
+  assert.equal(core.isElementVisible(visible, () => ({ display: 'block', visibility: 'visible' })), true);
+});
+
 run('fast response completes from a new completion marker even if generating was never observed', () => {
   const state = makeTrackerState();
   const timers = makeManualTimers();
