@@ -7,7 +7,7 @@ const NOTIFICATION_ICON = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAIAAAAC
 const TOAST_WIDTH = 400;
 const TOAST_HEIGHT = 150;
 const TOAST_MARGIN = 18;
-const KNOWN_PROVIDERS = new Set(['ChatGPT', 'Claude', 'Gemini', 'Grok', 'Kimi', 'Meta AI']);
+const KNOWN_PROVIDERS = new Set(['ChatGPT', 'Claude', 'Gemini']);
 
 function cleanProvider(provider) {
   const value = String(provider || '').trim();
