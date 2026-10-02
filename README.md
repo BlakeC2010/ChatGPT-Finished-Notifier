@@ -30,4 +30,4 @@ The extension runs locally. It does not save or transmit prompts or responses, u
 
 ## Reliability
 
-Version 1.3.1 focuses support on ChatGPT, Claude, and Gemini. Claude and Gemini use provider-specific prompt, send, stop/streaming, and completion selectors with generic fallbacks. The hidden-tab behavior, delivery retries, notification modes, and exact-tab return behavior are preserved.
+Version 1.3.2 focuses support on ChatGPT, Claude, and Gemini and fixes detector reinjection on already-open tabs. Claude and Gemini use provider-specific prompt, send, stop/streaming, and completion selectors with generic fallbacks. The hidden-tab behavior, delivery retries, notification modes, and exact-tab return behavior are preserved.
