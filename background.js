@@ -132,13 +132,28 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
-  if (!sender.tab || !Number.isInteger(sender.tab.id)) return false;
-
   if (message.type === 'TEST_NOTIFICATION') {
     const completionId = 'test-' + Date.now().toString(36);
-    deliverNotification(sender.tab.id, completionId, message.mode, '', (ok) => sendResponse({ ok }));
+    const senderTabId = sender.tab && Number.isInteger(sender.tab.id) ? sender.tab.id : null;
+
+    if (senderTabId !== null) {
+      deliverNotification(senderTabId, completionId, message.mode, '', (ok) => sendResponse({ ok }));
+      return true;
+    }
+
+    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      const activeTab = Array.isArray(tabs) ? tabs[0] : null;
+      const tabId = activeTab && Number.isInteger(activeTab.id) ? activeTab.id : null;
+      if (tabId === null) {
+        sendResponse({ ok: false });
+        return;
+      }
+      deliverNotification(tabId, completionId, message.mode, '', (ok) => sendResponse({ ok }));
+    });
     return true;
   }
+
+  if (!sender.tab || !Number.isInteger(sender.tab.id)) return false;
 
   if (message.type !== 'CHATGPT_RESPONSE_COMPLETE') return false;
 
