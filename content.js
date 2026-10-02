@@ -2,32 +2,44 @@
   'use strict';
 
   const core = globalThis.ChatGPTNotifierCore;
-  if (!core) return;
+  const providers = globalThis.AIChatProviderProfiles;
+  if (!core || !providers) return;
 
-  const STOP_SELECTOR = [
-    '[data-testid="stop-button"]',
-    'button[aria-label="Stop"]',
-    '[role="button"][aria-label="Stop"]',
-  ].join(', ');
+  const hostname = typeof location === 'object' && location ? location.hostname : 'chatgpt.com';
+  const profile = providers.getProfile(hostname) || providers.getProfile('chatgpt.com');
+  if (!profile) return;
+
   const CONTROL_SELECTOR = 'button, [role="button"]';
-  const COMPLETION_MARKER_SELECTOR = '[data-testid="copy-turn-action-button"]';
-  const SEND_SELECTOR = [
-    '[data-testid="send-button"]',
-    'button[aria-label="Send prompt"]',
-    'button[aria-label="Send message"]',
-    'button[aria-label="Send"]',
-  ].join(', ');
-  const PROMPT_SELECTOR = [
-    '#prompt-textarea',
-    '[data-testid="prompt-textarea"]',
-    'textarea',
-    '[contenteditable="true"]',
-  ].join(', ');
+  const GENERIC_STOP_SELECTORS = [
+    'button[aria-label^="Stop"]',
+    '[role="button"][aria-label^="Stop"]',
+    '[data-testid*="stop"]',
+    '[data-test-id*="stop"]',
+  ];
+  const GENERIC_SEND_SELECTORS = [
+    'button[aria-label^="Send"]',
+    'button[aria-label^="Submit"]',
+    'button[type="submit"]',
+    '[data-testid*="send"]',
+    '[data-test-id*="send"]',
+  ];
+  const GENERIC_COMPLETION_SELECTORS = [
+    'button[aria-label^="Copy"]',
+    '[role="button"][aria-label^="Copy"]',
+    '[data-testid*="copy"]',
+    '[data-test-id*="copy"]',
+  ];
+  const GENERIC_PROMPT_SELECTORS = ['textarea', '[contenteditable="true"]'];
+
+  const STOP_SELECTOR = [...profile.stop, ...GENERIC_STOP_SELECTORS].join(', ');
+  const SEND_SELECTOR = [...profile.send, ...GENERIC_SEND_SELECTORS].join(', ');
+  const COMPLETION_MARKER_SELECTOR = [...profile.completion, ...GENERIC_COMPLETION_SELECTORS].join(', ');
+  const PROMPT_SELECTOR = [...profile.prompt, ...GENERIC_PROMPT_SELECTORS].join(', ');
   const STABILIZE_MS = 800;
 
   function controlDescriptor(element) {
     return {
-      testId: element.getAttribute('data-testid') || '',
+      testId: element.getAttribute('data-testid') || element.getAttribute('data-test-id') || '',
       ariaLabel: element.getAttribute('aria-label') || '',
       title: element.getAttribute('title') || '',
       text: element.textContent || '',
@@ -35,7 +47,8 @@
   }
 
   function isUsableControl(element) {
-    return !element.hidden
+    return Boolean(element)
+      && !element.hidden
       && element.getAttribute('aria-hidden') !== 'true'
       && element.getAttribute('aria-disabled') !== 'true'
       && element.disabled !== true;
@@ -48,7 +61,7 @@
     for (const element of document.querySelectorAll(CONTROL_SELECTOR)) {
       if (!isUsableControl(element)) continue;
       const descriptor = controlDescriptor(element);
-      const searchable = `${descriptor.testId} ${descriptor.ariaLabel} ${descriptor.title} ${descriptor.text}`;
+      const searchable = descriptor.testId + ' ' + descriptor.ariaLabel + ' ' + descriptor.title + ' ' + descriptor.text;
       if (!/\bstop\b/i.test(searchable)) continue;
       descriptors.push(descriptor);
     }
@@ -57,7 +70,14 @@
   }
 
   function completionMarkerCount() {
-    return document.querySelectorAll(COMPLETION_MARKER_SELECTOR).length;
+    const markers = new Set(document.querySelectorAll(COMPLETION_MARKER_SELECTOR));
+
+    for (const element of document.querySelectorAll(CONTROL_SELECTOR)) {
+      if (!isUsableControl(element)) continue;
+      if (providers.isCompletionMarkerDescriptor(controlDescriptor(element))) markers.add(element);
+    }
+
+    return markers.size;
   }
 
   function isAway() {
@@ -68,7 +88,7 @@
     const randomPart = typeof crypto.randomUUID === 'function'
       ? crypto.randomUUID()
       : Math.random().toString(36).slice(2, 12);
-    return `${Date.now().toString(36)}-${randomPart}`;
+    return Date.now().toString(36) + '-' + randomPart;
   }
 
   function sendCompletion() {
@@ -79,7 +99,7 @@
       maxAttempts: 4,
       retryDelayMs: 500,
       ackTimeoutMs: 1500,
-      send: (message) => chrome.runtime.sendMessage(message),
+      send: (message) => chrome.runtime.sendMessage({ ...message, provider: profile.provider }),
     });
   }
 
@@ -99,8 +119,13 @@
 
   function findSendControl(target) {
     if (!target || typeof target.closest !== 'function') return null;
-    const control = target.closest(SEND_SELECTOR);
-    return control && isUsableControl(control) ? control : null;
+
+    const matched = target.closest(SEND_SELECTOR);
+    if (isUsableControl(matched)) return matched;
+
+    const control = target.closest(CONTROL_SELECTOR);
+    if (!isUsableControl(control)) return null;
+    return providers.isSendControlDescriptor(controlDescriptor(control)) ? control : null;
   }
 
   function findPromptEditor(target) {
@@ -143,6 +168,7 @@
   }, true);
 
   function observeNow() {
+    if (isGenerating()) armResponseCycle();
     tracker.observe();
   }
 
@@ -152,7 +178,7 @@
     childList: true,
     characterData: true,
     attributes: true,
-    attributeFilter: ['data-testid', 'aria-label', 'aria-hidden', 'aria-disabled', 'title', 'hidden', 'disabled'],
+    attributeFilter: ['data-testid', 'data-test-id', 'aria-label', 'aria-hidden', 'aria-disabled', 'title', 'hidden', 'disabled', 'class'],
   });
 
   document.addEventListener('visibilitychange', observeNow, { passive: true });
