@@ -6,7 +6,7 @@ const core = require('../background-core.js');
 
 function buildHarness({ mode = 'auto', windows = [{ id: 1, left: 0, top: 0, width: 1200, height: 800, focused: true }], windowCreateFails = false } = {}) {
   const listeners = { message: null, installed: null, clicked: null, buttonClicked: null };
-  const calls = { tabsCreated: [], windowsCreated: [], notifications: [], tabsUpdated: [], windowsUpdated: [], cleared: [] };
+  const calls = { tabsCreated: [], windowsCreated: [], notifications: [], tabsUpdated: [], windowsUpdated: [], cleared: [], scriptsInjected: [] };
   const context = {
     globalThis: null,
     ChatGPTNotifierBackgroundCore: core,
@@ -22,6 +22,12 @@ function buildHarness({ mode = 'auto', windows = [{ id: 1, left: 0, top: 0, widt
         onInstalled: { addListener(fn) { listeners.installed = fn; } },
       },
       storage: { sync: { get(defaults, cb) { cb({ ...defaults, notificationMode: mode }); } } },
+      scripting: {
+        executeScript(opts, cb) {
+          calls.scriptsInjected.push(opts);
+          cb?.([]);
+        },
+      },
       windows: {
         getAll(_opts, cb) { cb(windows); },
         create(opts, cb) { calls.windowsCreated.push(opts); if (windowCreateFails) { context.chrome.runtime.lastError = { message: 'create failed' }; cb?.(undefined); context.chrome.runtime.lastError = null; return; } cb?.({ id: 99 }); },
@@ -56,10 +62,12 @@ function send(h, message, sender = { tab: { id: 42 } }) {
   {
     const h = buildHarness();
     assert.ok(h.listeners.installed, 'install listener should be registered');
+    assert.equal(h.calls.scriptsInjected.length, 1);
+    assert.deepEqual(h.calls.scriptsInjected[0].files, ['providers.js', 'content-core.js', 'content.js']);
     h.listeners.installed({ reason: 'install' });
     assert.equal(h.calls.tabsCreated.length, 1);
     assert.equal(h.calls.tabsCreated[0].url, 'chrome-extension://test/welcome.html');
-    console.log('PASS opens welcome page after first install');
+    console.log('PASS reinjects detectors into open supported tabs and opens welcome page');
   }
 
   {
