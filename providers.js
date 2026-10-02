@@ -11,12 +11,16 @@
         '[role="button"][aria-label="Stop"]',
       ],
       send: [
+        '#composer-submit-button',
         '[data-testid="send-button"]',
         'button[aria-label="Send prompt"]',
         'button[aria-label="Send message"]',
         'button[aria-label="Send"]',
       ],
-      completion: ['[data-testid="copy-turn-action-button"]'],
+      completion: [
+        '[data-message-author-role="assistant"]',
+        '[data-testid="copy-turn-action-button"]',
+      ],
       prompt: [
         '#prompt-textarea',
         '[data-testid="prompt-textarea"]',
@@ -28,6 +32,7 @@
       provider: 'Claude',
       hosts: ['claude.ai'],
       generating: [
+        'div[data-is-streaming="true"]',
         'button[data-testid="stop-button"]',
         'button[aria-label*="Stop" i]',
         '[role="button"][aria-label*="Stop" i]',
@@ -39,6 +44,8 @@
         'fieldset button[type="submit"]',
       ],
       completion: [
+        '.font-claude-response',
+        'div[data-is-streaming]',
         '[data-testid="action-bar-copy"]',
         'button[aria-label="Copy"]',
         'button[aria-label*="Copy" i]',
@@ -66,6 +73,8 @@
         'button.send-button',
       ],
       completion: [
+        'model-response',
+        'message-content',
         'model-response button[aria-label="Copy"]',
         'model-response button[aria-label*="Copy" i]',
         'button[aria-label="Copy"]',
