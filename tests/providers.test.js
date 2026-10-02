@@ -12,21 +12,29 @@ vm.runInNewContext(fs.readFileSync('providers.js', 'utf8'), context, { filename:
 const providers = context.AIChatProviderProfiles;
 assert.ok(providers);
 
-const expected = new Map([
-  ['chatgpt.com', 'ChatGPT'],
-  ['claude.ai', 'Claude'],
-  ['gemini.google.com', 'Gemini'],
-  ['grok.com', 'Grok'],
-  ['www.kimi.com', 'Kimi'],
-  ['meta.ai', 'Meta AI'],
-]);
+const chatgpt = providers.getProfile('chatgpt.com');
+const claude = providers.getProfile('claude.ai');
+const gemini = providers.getProfile('gemini.google.com');
 
-for (const [host, provider] of expected) {
-  assert.equal(providers.getProfile(host)?.provider, provider);
-}
+assert.equal(chatgpt?.provider, 'ChatGPT');
+assert.equal(claude?.provider, 'Claude');
+assert.equal(gemini?.provider, 'Gemini');
+assert.equal(providers.getProfile('grok.com'), null);
 assert.equal(providers.getProfile('example.com'), null);
+
+assert.ok(claude.prompt.some((selector) => selector.includes('ProseMirror')));
+assert.ok(claude.send.some((selector) => selector.includes('send-button')));
+assert.ok(claude.generating.some((selector) => selector.includes('stop-button')));
+assert.ok(claude.completion.some((selector) => selector.includes('action-bar-copy')));
+
+assert.ok(gemini.prompt.some((selector) => selector.includes('ql-editor')));
+assert.ok(gemini.prompt.some((selector) => selector.includes('Enter a prompt here')));
+assert.ok(gemini.send.some((selector) => selector.includes('Send message')));
+assert.ok(gemini.generating.some((selector) => selector.includes('aria-busy')));
+assert.ok(gemini.completion.some((selector) => selector.includes('Copy')));
+
 assert.equal(providers.isSendControlDescriptor({ ariaLabel: 'Send message' }), true);
 assert.equal(providers.isCompletionMarkerDescriptor({ ariaLabel: 'Copy response' }), true);
 assert.equal(providers.isCompletionMarkerDescriptor({ ariaLabel: 'Copy link' }), false);
 
-console.log('PASS provider profiles map supported AI chat sites and generic controls');
+console.log('PASS Claude and Gemini provider profiles include current fallback selectors');
