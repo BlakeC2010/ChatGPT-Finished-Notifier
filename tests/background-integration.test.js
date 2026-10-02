@@ -29,6 +29,7 @@ function buildHarness({ mode = 'auto', windows = [{ id: 1, left: 0, top: 0, widt
       },
       tabs: {
         create(opts, cb) { calls.tabsCreated.push(opts); cb?.({ id: 77 }); },
+        query(_opts, cb) { cb?.([{ id: 77, windowId: 1 }]); },
         update(id, opts, cb) { calls.tabsUpdated.push([id, opts]); cb?.({ id, windowId: 5 }); },
       },
       notifications: {
@@ -98,9 +99,10 @@ function send(h, message, sender = { tab: { id: 42 } }) {
 
   {
     const h = buildHarness({ mode: 'system' });
-    const response = await send(h, { type: 'TEST_NOTIFICATION', mode: 'system' }, { tab: { id: 77 } });
+    const response = await send(h, { type: 'TEST_NOTIFICATION', mode: 'system' }, {});
     assert.equal(response && response.ok, true);
     assert.equal(h.calls.notifications.length, 1);
-    console.log('PASS welcome page can send a test notification');
+    assert.match(h.calls.notifications[0][0], /^chatgpt-done:77:test-/);
+    console.log('PASS extension welcome page can send a test notification without sender.tab');
   }
 })();
