@@ -5,22 +5,24 @@ const fs = require('node:fs');
 
 const manifest = JSON.parse(fs.readFileSync('manifest.json', 'utf8'));
 assert.equal(manifest.name, 'AI Chat Notifications');
-assert.equal(manifest.version, '1.3.1');
+assert.equal(manifest.version, '1.3.2');
 assert.equal(manifest.description, 'Get notified when ChatGPT, Claude, or Gemini finishes responding.');
 assert.ok(manifest.permissions.includes('notifications'));
 assert.ok(manifest.permissions.includes('storage'));
+assert.ok(manifest.permissions.includes('scripting'));
 assert.equal(manifest.options_ui.page, 'welcome.html');
 assert.equal(manifest.options_ui.open_in_tab, true);
 
 const matches = manifest.content_scripts.flatMap((entry) => entry.matches || []);
 for (const host of ['chatgpt.com', 'claude.ai', 'gemini.google.com']) {
   assert.ok(matches.some((pattern) => pattern.includes(host)), `missing ${host}`);
+  assert.ok((manifest.host_permissions || []).some((pattern) => pattern.includes(host)), `missing host permission for ${host}`);
 }
 for (const host of ['grok.com', 'kimi.com', 'meta.ai']) {
   assert.ok(!matches.some((pattern) => pattern.includes(host)), `unexpected ${host}`);
 }
 assert.ok(manifest.content_scripts[0].js.includes('providers.js'));
-console.log('PASS manifest exposes v1.3.1 ChatGPT Claude and Gemini support');
+console.log('PASS manifest exposes v1.3.2 ChatGPT Claude and Gemini support');
 
 const welcome = fs.readFileSync('welcome.html', 'utf8');
 for (const mode of ['auto', 'browser', 'system']) {
