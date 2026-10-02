@@ -113,6 +113,7 @@ function buildHarness() {
   };
   context.globalThis = context;
 
+  vm.runInNewContext(fs.readFileSync('providers.js', 'utf8'), context, { filename: 'providers.js' });
   vm.runInNewContext(fs.readFileSync('content.js', 'utf8'), context, { filename: 'content.js' });
 
   return {
@@ -158,6 +159,7 @@ run('clicking Send arms before a fast response and notifies after completion mar
 
   assert.equal(h.state.sends.length, 1);
   assert.equal(h.state.sends[0].type, 'CHATGPT_RESPONSE_COMPLETE');
+  assert.equal(h.state.sends[0].provider, 'ChatGPT');
 });
 
 run('pressing Enter in the prompt editor also arms the response cycle', () => {
