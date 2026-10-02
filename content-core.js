@@ -32,6 +32,33 @@
     return descriptors.some((descriptor) => isStopControlDescriptor(descriptor));
   }
 
+  function isElementVisible(element, readStyle) {
+    if (!element) return false;
+    if (element.hidden) return false;
+    if (typeof element.getAttribute === 'function' && element.getAttribute('aria-hidden') === 'true') {
+      return false;
+    }
+
+    if (typeof element.getClientRects === 'function' && element.getClientRects().length === 0) {
+      return false;
+    }
+
+    if (typeof readStyle === 'function') {
+      let style;
+      try {
+        style = readStyle(element);
+      } catch (_) {
+        style = null;
+      }
+
+      if (style && (style.display === 'none' || style.visibility === 'hidden' || style.visibility === 'collapse')) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
   function delay(ms) {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
@@ -252,6 +279,7 @@
   return {
     isStopControlDescriptor,
     detectGeneratingFromDescriptors,
+    isElementVisible,
     deliverCompletionWithRetry,
     ResponseCycleTracker,
     GenerationTracker,
