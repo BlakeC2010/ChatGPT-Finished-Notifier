@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "ChatGPT Finished Notifier",
-  "version": "1.2.0",
-  "description": "Notifies you when ChatGPT finishes responding with smart browser or system notifications.",
+  "name": "AI Chat Notifications",
+  "version": "1.3.0",
+  "description": "Get notified when supported AI chats finish responding.",
   "permissions": [
     "notifications",
     "storage"
@@ -17,9 +17,17 @@
   "content_scripts": [
     {
       "matches": [
-        "https://chatgpt.com/*"
+        "https://chatgpt.com/*",
+        "https://claude.ai/*",
+        "https://gemini.google.com/*",
+        "https://grok.com/*",
+        "https://kimi.com/*",
+        "https://www.kimi.com/*",
+        "https://meta.ai/*",
+        "https://www.meta.ai/*"
       ],
       "js": [
+        "providers.js",
         "content-core.js",
         "content.js"
       ],
