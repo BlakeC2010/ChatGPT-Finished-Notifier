@@ -5,7 +5,7 @@ const fs = require('node:fs');
 
 const manifest = JSON.parse(fs.readFileSync('manifest.json', 'utf8'));
 assert.equal(manifest.name, 'AI Chat Notifications');
-assert.equal(manifest.version, '1.3.4');
+assert.equal(manifest.version, '1.3.5');
 assert.equal(manifest.description, 'Get notified when ChatGPT, Claude, or Gemini finishes responding.');
 assert.ok(manifest.permissions.includes('notifications'));
 assert.ok(manifest.permissions.includes('storage'));
@@ -27,7 +27,7 @@ for (const host of ['grok.com', 'kimi.com', 'meta.ai']) {
 }
 const detectorEntry = manifest.content_scripts.find((entry) => (entry.js || []).includes('providers.js'));
 assert.ok(detectorEntry, 'AI response detector content script is missing');
-console.log('PASS manifest exposes v1.3.4 provider detection plus on-demand in-page overlays');
+console.log('PASS manifest exposes v1.3.5 provider detection plus on-demand in-page overlays');
 
 const welcome = fs.readFileSync('welcome.html', 'utf8');
 for (const mode of ['auto', 'browser', 'system']) {
@@ -43,6 +43,7 @@ assert.match(welcome, /src=["']welcome\.js["']/);
 console.log('PASS welcome page offers notification modes and current providers');
 
 const overlay = fs.readFileSync('overlay.js', 'utf8');
+assert.doesNotThrow(() => new Function(overlay), 'overlay.js must parse as valid JavaScript');
 assert.match(overlay, /SHOW_INLINE_TOAST/);
 assert.match(overlay, /attachShadow/);
 assert.match(overlay, /OPEN_CHAT/);
