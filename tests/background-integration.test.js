@@ -4,9 +4,9 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const core = require('../background-core.js');
 
-function buildHarness({ mode = 'auto', windows = [{ id: 1, left: 0, top: 0, width: 1200, height: 800, focused: true }], windowCreateFails = false } = {}) {
+function buildHarness({ mode = 'auto', windows = [{ id: 1, left: 0, top: 0, width: 1200, height: 800, focused: true }], tabMessageFails = false } = {}) {
   const listeners = { message: null, installed: null, clicked: null, buttonClicked: null };
-  const calls = { tabsCreated: [], windowsCreated: [], notifications: [], tabsUpdated: [], windowsUpdated: [], cleared: [], scriptsInjected: [] };
+  const calls = { tabsCreated: [], notifications: [], tabsUpdated: [], tabsMessages: [], windowsUpdated: [], cleared: [], scriptsInjected: [] };
   const context = {
     globalThis: null,
     ChatGPTNotifierBackgroundCore: core,
@@ -30,12 +30,21 @@ function buildHarness({ mode = 'auto', windows = [{ id: 1, left: 0, top: 0, widt
       },
       windows: {
         getAll(_opts, cb) { cb(windows); },
-        create(opts, cb) { calls.windowsCreated.push(opts); if (windowCreateFails) { context.chrome.runtime.lastError = { message: 'create failed' }; cb?.(undefined); context.chrome.runtime.lastError = null; return; } cb?.({ id: 99 }); },
         update(id, opts, cb) { calls.windowsUpdated.push([id, opts]); cb?.({ id, ...opts }); },
       },
       tabs: {
         create(opts, cb) { calls.tabsCreated.push(opts); cb?.({ id: 77 }); },
         query(_opts, cb) { cb?.([{ id: 77, windowId: 1 }]); },
+        sendMessage(id, message, cb) {
+          calls.tabsMessages.push([id, message]);
+          if (tabMessageFails) {
+            context.chrome.runtime.lastError = { message: 'cannot access page' };
+            cb?.(undefined);
+            context.chrome.runtime.lastError = null;
+            return;
+          }
+          cb?.({ ok: true });
+        },
         update(id, opts, cb) { calls.tabsUpdated.push([id, opts]); cb?.({ id, windowId: 5 }); },
       },
       notifications: {
@@ -74,18 +83,19 @@ function send(h, message, sender = { tab: { id: 42 } }) {
     const h = buildHarness({ mode: 'auto', windows: [{ id: 1, left: 10, top: 20, width: 1200, height: 800, focused: true }] });
     const response = await send(h, { type: 'CHATGPT_RESPONSE_COMPLETE', completionId: 'done-1' });
     assert.equal(response && response.ok, true);
-    assert.equal(h.calls.windowsCreated.length, 1);
+    assert.equal(h.calls.tabsMessages.length, 1);
+    assert.equal(h.calls.tabsMessages[0][0], 77);
+    assert.equal(h.calls.tabsMessages[0][1].type, 'SHOW_INLINE_TOAST');
+    assert.equal(h.calls.tabsMessages[0][1].sourceTabId, 42);
     assert.equal(h.calls.notifications.length, 0);
-    assert.match(h.calls.windowsCreated[0].url, /toast\.html\?tab=42/);
-    assert.equal(h.calls.windowsCreated[0].focused, false);
-    console.log('PASS auto uses custom browser toast when Chrome is focused');
+    console.log('PASS auto shows an in-page alert in the active Chrome tab');
   }
 
   {
     const h = buildHarness({ mode: 'auto', windows: [{ id: 1, left: 10, top: 20, width: 1200, height: 800, focused: false }] });
     const response = await send(h, { type: 'CHATGPT_RESPONSE_COMPLETE', completionId: 'done-2' });
     assert.equal(response && response.ok, true);
-    assert.equal(h.calls.windowsCreated.length, 0);
+    assert.equal(h.calls.tabsMessages.length, 0);
     assert.equal(h.calls.notifications.length, 1);
     assert.equal(h.calls.notifications[0][1].title, 'Response ready');
     assert.equal(h.calls.notifications[0][1].buttons?.[0]?.title, 'Open chat');
@@ -95,14 +105,14 @@ function send(h, message, sender = { tab: { id: 42 } }) {
   {
     const h = buildHarness({
       mode: 'auto',
-      windowCreateFails: true,
+      tabMessageFails: true,
       windows: [{ id: 1, left: 10, top: 20, width: 1200, height: 800, focused: true }],
     });
     const response = await send(h, { type: 'CHATGPT_RESPONSE_COMPLETE', completionId: 'done-fallback' });
     assert.equal(response && response.ok, true);
-    assert.equal(h.calls.windowsCreated.length, 1);
+    assert.equal(h.calls.tabsMessages.length, 1);
     assert.equal(h.calls.notifications.length, 1);
-    console.log('PASS auto falls back to a system notification if browser toast creation fails');
+    console.log('PASS auto falls back to a system notification on restricted pages');
   }
 
   {
