@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AI Chat Notifications</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <main class="popup">
+    <header>
+      <div>
+        <strong>AI Chat Notifications</strong>
+        <span id="popup-version"></span>
+      </div>
+    </header>
+
+    <section class="modes" aria-label="Notification method">
+      <label>
+        <input type="radio" name="notificationMode" value="auto">
+        <span><strong>Auto</strong><small>Browser alert in Chrome, system alert outside Chrome.</small></span>
+      </label>
+      <label>
+        <input type="radio" name="notificationMode" value="browser">
+        <span><strong>Browser alert</strong><small>Show the alert inside the active webpage.</small></span>
+      </label>
+      <label>
+        <input type="radio" name="notificationMode" value="system">
+        <span><strong>System</strong><small>Always use Windows or macOS notifications.</small></span>
+      </label>
+    </section>
+
+    <div class="actions">
+      <button id="popup-test" type="button">Test</button>
+      <button id="open-settings" type="button">Full settings</button>
+    </div>
+    <p id="popup-status" aria-live="polite"></p>
+  </main>
+
+  <script src="background-core.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>
