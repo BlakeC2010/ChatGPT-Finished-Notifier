@@ -4,9 +4,6 @@ importScripts('background-core.js');
 
 const core = globalThis.ChatGPTNotifierBackgroundCore;
 const NOTIFICATION_ICON = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAIAAAACACAYAAADDPmHLAAADNElEQVR42u3dO1IbQRRGYU2XlsGjxAIcE5J7EU7Zhcu7IPUinCsk9gJM+bEPHBHYhaTRqKdf9zsRVYDQ9H/u7Yc0YrMBAAAAAARiKv0Hr252r4b9MH9+vUxDCSDwtoWYBB9bhEnwsUWYBB9bhCT8Psk15kn4sSVIwo8tQRJ+bAmS8GNLkIQfW4Ik/NgSJEMWm6T6Y3cBHUAHUP2Ru8DWUK3Hh/2ng9/7/vC1iec4qf5yodeQ4dSLRgSoGHwJEU4JYBHYSPg5H8c5QIfh15Igaf/thZXzcU9lqAM0WqmlOgEBGg6nxN8hQAM8Pzy1eQ5gDbB+Vf4f/v3+Mfv28NhWUAdorPKfH56KdoTwAvz++aO55/ReFzAFFAz8+vZu9fZ/qMoPhX/JNHBsCtiq7nm/d0iK3hZ9YaaA3K19zuPNCfbYz5Rs/UMLUGNefwt2aXXXCH9IAWqGf6rKz533CXBm8LVW9O8FOFcKa4BBtnLHJGht3h9qG1g6/I8vX7Kt8OeG7ySw4cpfGmrtyh9+G9iDBATosPq/7T5fLME5gqz97mEdoEAnuN8//vN1S3S7CKw9/59aDOYgV/UPtwhsYfE3dyqoHb4poEMJSt41lFR/WxKUvmVMB2hIghr3C7o5NLMESxaHNW8U7WoX0OLJ3yGub++auTs47DuCatPKLeDWACAACAACgAAgAAgAAoAAIAABQAAQAAQAARqmp/cC9PR8dQAdQDVFft5bA1jmGnJ+xlCIDjBC+D1cTzJYsa8rGaTY12cXYBcAAoAAIEATtLpfHvX6kkGKfV3JYMW+nm20Qbvk/wVYA3TO3EOY0Q+jQgpwbqhRJLANtA1U/ZG7gA6gA4AAIAAIMCxLD3YiHAjpADpADM6t5ijHwaE6wNxQI70WEO6TQt/CXfv/AxNg0IWhKQAEQBABjn3MOPrgVIY6gA4AAoAA1gHx5n8dAPME0AXGrH4dAPMF0AXGq34dAOcJoAuMVf2LOgAJxgl/8RRAgjHCv2gNQIL+w794EUiCvsPPsgsgQb/hZ9sGkqDP8DebzSZ7cFc3u1fxtB/8agIQoY/gVxeACG0HX0wAQlhPAQAAAACa4S9ZFnZODus74AAAAABJRU5ErkJggg==';
-const TOAST_WIDTH = 400;
-const TOAST_HEIGHT = 150;
-const TOAST_MARGIN = 18;
 const KNOWN_PROVIDERS = new Set(['ChatGPT', 'Claude', 'Gemini']);
 
 const SUPPORTED_URL_PATTERNS = [
@@ -99,19 +96,32 @@ function createSystemNotification(tabId, completionId, provider, callback) {
   });
 }
 
-function createBrowserToast(tabId, provider, anchorWindow, callback) {
-  const bounds = core.computeToastBounds(anchorWindow, TOAST_WIDTH, TOAST_HEIGHT, TOAST_MARGIN);
-  const name = cleanProvider(provider);
-  let url = chrome.runtime.getURL('toast.html') + '?tab=' + encodeURIComponent(tabId);
-  if (name) url += '&provider=' + encodeURIComponent(name);
+function createInlineToast(sourceTabId, provider, focusedWindow, callback) {
+  if (!focusedWindow || !Number.isInteger(focusedWindow.id)) {
+    callback(false);
+    return;
+  }
 
-  chrome.windows.create({
-    url,
-    type: 'popup',
-    focused: false,
-    ...bounds,
-  }, (createdWindow) => {
-    callback(!chrome.runtime.lastError && Boolean(createdWindow));
+  chrome.tabs.query({ active: true, windowId: focusedWindow.id }, (tabs) => {
+    if (chrome.runtime.lastError) {
+      callback(false);
+      return;
+    }
+
+    const activeTab = Array.isArray(tabs) ? tabs[0] : null;
+    if (!activeTab || !Number.isInteger(activeTab.id)) {
+      callback(false);
+      return;
+    }
+
+    chrome.tabs.sendMessage(activeTab.id, {
+      type: 'SHOW_INLINE_TOAST',
+      sourceTabId,
+      provider: cleanProvider(provider),
+    }, (response) => {
+      const ok = !chrome.runtime.lastError && response && response.ok === true;
+      callback(Boolean(ok));
+    });
   });
 }
 
@@ -126,12 +136,14 @@ function deliverNotification(tabId, completionId, requestedMode, provider, callb
       const deliveryMode = core.chooseDeliveryMode(mode, Boolean(focusedWindow));
 
       if (deliveryMode === 'browser') {
-        const anchorWindow = focusedWindow || normalWindows[0] || null;
-        createBrowserToast(tabId, provider, anchorWindow, (ok) => {
-          if (ok || mode !== 'auto') {
-            callback(ok);
+        createInlineToast(tabId, provider, focusedWindow, (ok) => {
+          if (ok) {
+            callback(true);
             return;
           }
+
+          // Chrome internal pages and other restricted URLs cannot host a content script.
+          // Fall back to a native notification instead of opening a separate popup window.
           createSystemNotification(tabId, completionId, provider, callback);
         });
         return;
