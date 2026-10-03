@@ -37,6 +37,7 @@
   const PROMPT_SELECTOR = [...profile.prompt, ...GENERIC_PROMPT_SELECTORS].join(', ');
   const STABILIZE_MS = 1000;
   const STREAM_MESSAGE_SOURCE = 'ai-chat-notifications';
+  const STREAM_CYCLE_ATTR = 'data-ai-chat-notifier-cycle';
 
   let activeCycle = null;
 
@@ -92,6 +93,32 @@
 
   function sourceStillOpen(cycle = activeCycle) {
     return Boolean(cycle) && conversationKey() === cycle.sourceConversationKey;
+  }
+
+  function startsOnNewChatRoute() {
+    try {
+      const path = location.pathname || '/';
+      if (profile.provider === 'ChatGPT') return path === '/' || path === '/new';
+      if (profile.provider === 'Claude') return path === '/' || path === '/new';
+      if (profile.provider === 'Gemini') return path === '/' || path === '/app' || path === '/app/';
+    } catch (_) {}
+    return false;
+  }
+
+  function maybeAdoptConversationRoute() {
+    if (!activeCycle || !activeCycle.startedOnNewChat) return;
+    const currentKey = conversationKey();
+    if (!currentKey || currentKey === activeCycle.sourceConversationKey) return;
+
+    const age = Date.now() - activeCycle.startedAt;
+    if (age > 15000) {
+      activeCycle.startedOnNewChat = false;
+      return;
+    }
+
+    activeCycle.sourceConversationKey = currentKey;
+    activeCycle.sourceUrl = currentUrl();
+    activeCycle.startedOnNewChat = false;
   }
 
   function isGeneratingForTracker() {
@@ -209,9 +236,21 @@
   }
 
   function updateCyclePreview() {
-    if (!activeCycle || !sourceStillOpen(activeCycle)) return;
+    if (!activeCycle) return;
+
+    maybeAdoptConversationRoute();
+    if (!sourceStillOpen(activeCycle)) return;
+
+    const title = readChatTitle();
+    if (title && !/^(ChatGPT|Claude|Gemini) chat$/i.test(title)) {
+      activeCycle.chatTitle = title;
+    }
+
     const snippet = readResponseSnippet();
     if (snippet) activeCycle.latestSnippet = snippet;
+
+    const url = currentUrl();
+    if (url) activeCycle.sourceUrl = url;
   }
 
   function isAwayFromCycle(cycle) {
@@ -240,7 +279,19 @@
   }
 
   function clearCycle() {
+    const cycleId = activeCycle?.id || '';
     activeCycle = null;
+
+    try {
+      const raw = document.documentElement?.getAttribute(STREAM_CYCLE_ATTR);
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if (!cycleId || String(parsed?.cycleId || '') === cycleId) {
+        document.documentElement.removeAttribute(STREAM_CYCLE_ATTR);
+      }
+    } catch (_) {
+      document.documentElement?.removeAttribute(STREAM_CYCLE_ATTR);
+    }
   }
 
   function completeCycle(reason) {
@@ -288,9 +339,17 @@
       latestSnippet: readResponseSnippet(),
       sourceTheme: readSourceTheme(),
       streamTracked: false,
+      startedAt: Date.now(),
+      startedOnNewChat: startsOnNewChatRoute(),
     };
 
     try {
+      document.documentElement?.setAttribute(STREAM_CYCLE_ATTR, JSON.stringify({
+        cycleId: activeCycle.id,
+        provider: profile.provider,
+        armedAt: activeCycle.startedAt,
+      }));
+
       window.postMessage({
         source: STREAM_MESSAGE_SOURCE,
         type: 'ARM_STREAM_TRACKER',
