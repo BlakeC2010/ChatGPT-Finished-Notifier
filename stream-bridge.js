@@ -5,7 +5,22 @@
   globalThis.__AI_CHAT_NOTIFICATIONS_STREAM_BRIDGE__ = true;
 
   const SOURCE = 'ai-chat-notifications';
+  const CYCLE_ATTR = 'data-ai-chat-notifier-cycle';
   let activeCycle = null;
+
+  function readCycleFromDom() {
+    try {
+      const raw = document.documentElement?.getAttribute(CYCLE_ATTR);
+      if (!raw) return activeCycle;
+      const parsed = JSON.parse(raw);
+      const cycleId = String(parsed?.cycleId || '');
+      const provider = String(parsed?.provider || '');
+      if (!cycleId || !provider) return activeCycle;
+      return { cycleId, provider, armedAt: Number(parsed.armedAt) || Date.now() };
+    } catch (_) {
+      return activeCycle;
+    }
+  }
 
   function normalizeMethod(input, init) {
     const method = init?.method
@@ -79,7 +94,8 @@
   }
 
   window.fetch = async function (...args) {
-    const cycle = activeCycle ? { ...activeCycle } : null;
+    const liveCycle = readCycleFromDom();
+    const cycle = liveCycle ? { ...liveCycle } : null;
     const url = urlOf(args[0]);
     const method = normalizeMethod(args[0], args[1]);
     const response = await originalFetch.apply(this, args);
