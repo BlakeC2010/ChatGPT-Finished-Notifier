@@ -92,6 +92,71 @@
     return document.hidden;
   }
 
+  function normalizePreviewText(value) {
+    return String(value || '').replace(/\s+/g, ' ').trim();
+  }
+
+  function truncatePreview(value, maxLength = 150) {
+    const text = normalizePreviewText(value);
+    if (text.length <= maxLength) return text;
+    const slice = text.slice(0, maxLength - 1);
+    const lastSpace = slice.lastIndexOf(' ');
+    const trimmed = lastSpace > 90 ? slice.slice(0, lastSpace) : slice;
+    return trimmed.trimEnd() + '…';
+  }
+
+  function readChatTitle() {
+    let title = normalizePreviewText(document.title);
+    title = title.replace(/^\(\d+\)\s*/, '');
+    title = title.replace(/\s*[\-–—|·]\s*(ChatGPT|Claude|Gemini|Google Gemini)\s*$/i, '').trim();
+
+    if (!title || /^(chatgpt|claude|gemini|google gemini|new chat)$/i.test(title)) {
+      return profile.provider + ' chat';
+    }
+
+    return truncatePreview(title, 80);
+  }
+
+  function readResponseSnippet() {
+    const selectors = Array.isArray(profile.responseText) ? profile.responseText : [];
+    for (const selector of selectors) {
+      const matches = [...document.querySelectorAll(selector)];
+      for (let index = matches.length - 1; index >= 0; index -= 1) {
+        const element = matches[index];
+        const text = normalizePreviewText(
+          typeof element.innerText === 'string' ? element.innerText : element.textContent
+        );
+        if (text) return truncatePreview(text, 150);
+      }
+    }
+    return '';
+  }
+
+  function readSourceTheme() {
+    try {
+      const target = document.body || document.documentElement;
+      if (!target || typeof getComputedStyle !== 'function') return '';
+      const background = getComputedStyle(target).backgroundColor || '';
+      const match = background.match(/rgba?\((\d+)[,\s]+(\d+)[,\s]+(\d+)/i);
+      if (!match) return '';
+      const r = Number(match[1]);
+      const g = Number(match[2]);
+      const b = Number(match[3]);
+      const luminance = (0.2126 * r) + (0.7152 * g) + (0.0722 * b);
+      return luminance < 128 ? 'dark' : 'light';
+    } catch (_) {
+      return '';
+    }
+  }
+
+  function readNotificationContext() {
+    return {
+      chatTitle: readChatTitle(),
+      snippet: readResponseSnippet(),
+      sourceTheme: readSourceTheme(),
+    };
+  }
+
   function makeCompletionId() {
     const randomPart = typeof crypto.randomUUID === 'function'
       ? crypto.randomUUID()
@@ -107,7 +172,11 @@
       maxAttempts: 4,
       retryDelayMs: 500,
       ackTimeoutMs: 1500,
-      send: (message) => chrome.runtime.sendMessage({ ...message, provider: profile.provider }),
+      send: (message) => chrome.runtime.sendMessage({
+        ...message,
+        provider: profile.provider,
+        ...readNotificationContext(),
+      }),
     });
   }
 
