@@ -47,13 +47,14 @@ function showLocalBrowserTest() {
   const overlay = globalThis.AIChatNotificationsOverlay;
   if (!overlay || typeof overlay.showToast !== 'function') return false;
 
+  const prefersLight = typeof globalThis.matchMedia === 'function'
+    && globalThis.matchMedia('(prefers-color-scheme: light)').matches;
+
   return overlay.showToast({
     provider: 'ChatGPT',
     chatTitle: 'Example chat',
     snippet: 'This is how an in-browser response notification will look.',
-    sourceTheme: document.documentElement.matches?.(':root') && matchMedia?.('(prefers-color-scheme: light)').matches
-      ? 'light'
-      : 'dark',
+    sourceTheme: prefersLight ? 'light' : 'dark',
   });
 }
 
