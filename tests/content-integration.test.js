@@ -17,6 +17,7 @@ function buildHarness() {
     hidden: false,
     focused: true,
     sends: [],
+    responseText: 'Here is the finished AI response preview.',
   };
 
   const sendButton = {
@@ -46,7 +47,13 @@ function buildHarness() {
     },
   };
 
+  const responseElement = {
+    innerText: state.responseText,
+    textContent: state.responseText,
+  };
+
   const document = {
+    title: 'Geometry Homework - ChatGPT',
     documentElement: {},
     get hidden() { return state.hidden; },
     hasFocus() { return state.focused; },
@@ -60,8 +67,11 @@ function buildHarness() {
       return null;
     },
     querySelectorAll(selector) {
-      if (selector.includes('copy-turn-action-button')) {
-        return Array.from({ length: state.completionMarkers }, () => ({}));
+      if (selector.includes('data-message-author-role') && !selector.includes(',')) {
+        return state.completionMarkers ? [responseElement] : [];
+      }
+      if (selector.includes('copy-turn-action-button') || selector.includes('data-message-author-role')) {
+        return Array.from({ length: state.completionMarkers }, () => responseElement);
       }
       if (selector === 'button, [role="button"]') return [];
       return [];
@@ -160,6 +170,8 @@ run('clicking Send arms before a fast response and notifies after completion mar
   assert.equal(h.state.sends.length, 1);
   assert.equal(h.state.sends[0].type, 'CHATGPT_RESPONSE_COMPLETE');
   assert.equal(h.state.sends[0].provider, 'ChatGPT');
+  assert.equal(h.state.sends[0].chatTitle, 'Geometry Homework');
+  assert.equal(h.state.sends[0].snippet, 'Here is the finished AI response preview.');
 });
 
 run('pressing Enter in the prompt editor also arms the response cycle', () => {
