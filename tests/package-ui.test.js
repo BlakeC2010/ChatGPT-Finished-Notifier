@@ -26,7 +26,8 @@ for (const host of ['chatgpt.com', 'claude.ai', 'gemini.google.com']) {
 for (const host of ['grok.com', 'kimi.com', 'meta.ai']) {
   assert.ok(!matches.some((pattern) => pattern.includes(host)), `unexpected ${host}`);
 }
-assert.ok(manifest.content_scripts[0].js.includes('providers.js'));
+const detectorEntry = manifest.content_scripts.find((entry) => (entry.js || []).includes('providers.js'));
+assert.ok(detectorEntry, 'AI response detector content script is missing');
 console.log('PASS manifest exposes v1.3.3 provider detection plus in-page overlays');
 
 const welcome = fs.readFileSync('welcome.html', 'utf8');
