@@ -25,7 +25,6 @@
     '[data-testid*="send" i]',
     '[data-test-id*="send" i]',
   ];
-  const GENERIC_COMPLETION_SELECTORS = [];
   const GENERIC_PROMPT_SELECTORS = [
     'textarea',
     '[contenteditable="true"][role="textbox"]',
@@ -34,23 +33,27 @@
 
   const STOP_SELECTOR = [...profile.generating, ...GENERIC_STOP_SELECTORS].join(', ');
   const SEND_SELECTOR = [...profile.send, ...GENERIC_SEND_SELECTORS].join(', ');
-  const COMPLETION_MARKER_SELECTOR = [...profile.completion, ...GENERIC_COMPLETION_SELECTORS].join(', ');
+  const COMPLETION_MARKER_SELECTOR = [...profile.completion].join(', ');
   const PROMPT_SELECTOR = [...profile.prompt, ...GENERIC_PROMPT_SELECTORS].join(', ');
   const STABILIZE_MS = 1000;
+  const STREAM_MESSAGE_SOURCE = 'ai-chat-notifications';
+
+  let activeCycle = null;
 
   function controlDescriptor(element) {
     return {
-      testId: element.getAttribute('data-testid') || element.getAttribute('data-test-id') || '',
-      ariaLabel: element.getAttribute('aria-label') || '',
-      title: element.getAttribute('title') || '',
+      testId: element.getAttribute?.('data-testid') || element.getAttribute?.('data-test-id') || '',
+      ariaLabel: element.getAttribute?.('aria-label') || '',
+      title: element.getAttribute?.('title') || '',
       text: element.textContent || '',
     };
   }
 
   function isUsableControl(element) {
+    if (!element) return false;
     const readStyle = typeof getComputedStyle === 'function' ? getComputedStyle : null;
     return core.isElementVisible(element, readStyle)
-      && element.getAttribute('aria-disabled') !== 'true'
+      && element.getAttribute?.('aria-disabled') !== 'true'
       && element.disabled !== true;
   }
 
@@ -62,7 +65,7 @@
     return false;
   }
 
-  function isGenerating() {
+  function readDomGenerating() {
     if (anyUsableMatch(STOP_SELECTOR)) return true;
 
     const descriptors = [];
@@ -77,6 +80,30 @@
     return core.detectGeneratingFromDescriptors(descriptors);
   }
 
+  function conversationKey() {
+    try {
+      const origin = location.origin || '';
+      const pathname = location.pathname || '/';
+      return origin + pathname.replace(/\/+$/, '');
+    } catch (_) {
+      return '';
+    }
+  }
+
+  function sourceStillOpen(cycle = activeCycle) {
+    return Boolean(cycle) && conversationKey() === cycle.sourceConversationKey;
+  }
+
+  function isGeneratingForTracker() {
+    if (activeCycle && !sourceStillOpen(activeCycle)) {
+      // Navigating to another chat removes the old response DOM immediately.
+      // Keep the tracker armed until the page-world stream bridge confirms the
+      // original request actually finished.
+      return true;
+    }
+    return readDomGenerating();
+  }
+
   function completionMarkerCount() {
     const markers = new Set(document.querySelectorAll(COMPLETION_MARKER_SELECTOR));
 
@@ -88,21 +115,24 @@
     return markers.size;
   }
 
-  function isAway() {
-    return document.hidden;
-  }
-
   function normalizePreviewText(value) {
     return String(value || '').replace(/\s+/g, ' ').trim();
   }
 
-  function truncatePreview(value, maxLength = 150) {
+  function truncatePreview(value, maxLength = 160) {
     const text = normalizePreviewText(value);
     if (text.length <= maxLength) return text;
     const slice = text.slice(0, maxLength - 1);
     const lastSpace = slice.lastIndexOf(' ');
-    const trimmed = lastSpace > 90 ? slice.slice(0, lastSpace) : slice;
+    const trimmed = lastSpace > 95 ? slice.slice(0, lastSpace) : slice;
     return trimmed.trimEnd() + '…';
+  }
+
+  function cleanAssistantText(value) {
+    let text = normalizePreviewText(value);
+    text = text.replace(/^(ChatGPT|Claude|Gemini)\s+said:\s*/i, '');
+    text = text.replace(/^(Assistant|Model)\s*:\s*/i, '');
+    return text.trim();
   }
 
   function readChatTitle() {
@@ -114,21 +144,34 @@
       return profile.provider + ' chat';
     }
 
-    return truncatePreview(title, 80);
+    return truncatePreview(title, 90);
   }
 
   function readResponseSnippet() {
     const selectors = Array.isArray(profile.responseText) ? profile.responseText : [];
+
     for (const selector of selectors) {
-      const matches = [...document.querySelectorAll(selector)];
+      let matches;
+      try {
+        matches = [...document.querySelectorAll(selector)];
+      } catch (_) {
+        continue;
+      }
+
       for (let index = matches.length - 1; index >= 0; index -= 1) {
         const element = matches[index];
-        const text = normalizePreviewText(
-          typeof element.innerText === 'string' ? element.innerText : element.textContent
-        );
-        if (text) return truncatePreview(text, 150);
+        let raw = '';
+
+        if (typeof element.innerText === 'string') raw = element.innerText;
+        else raw = element.textContent || '';
+
+        const text = cleanAssistantText(raw);
+        if (!text) continue;
+
+        return truncatePreview(text, 160);
       }
     }
+
     return '';
   }
 
@@ -139,6 +182,7 @@
       const background = getComputedStyle(target).backgroundColor || '';
       const match = background.match(/rgba?\((\d+)[,\s]+(\d+)[,\s]+(\d+)/i);
       if (!match) return '';
+
       const r = Number(match[1]);
       const g = Number(match[2]);
       const b = Number(match[3]);
@@ -149,49 +193,113 @@
     }
   }
 
-  function readNotificationContext() {
-    return {
-      chatTitle: readChatTitle(),
-      snippet: readResponseSnippet(),
-      sourceTheme: readSourceTheme(),
-    };
+  function currentUrl() {
+    try {
+      return String(location.href || '');
+    } catch (_) {
+      return '';
+    }
   }
 
-  function makeCompletionId() {
-    const randomPart = typeof crypto.randomUUID === 'function'
+  function makeCycleId() {
+    const randomPart = typeof crypto?.randomUUID === 'function'
       ? crypto.randomUUID()
       : Math.random().toString(36).slice(2, 12);
     return Date.now().toString(36) + '-' + randomPart;
   }
 
-  function sendCompletion() {
-    const completionId = makeCompletionId();
+  function updateCyclePreview() {
+    if (!activeCycle || !sourceStillOpen(activeCycle)) return;
+    const snippet = readResponseSnippet();
+    if (snippet) activeCycle.latestSnippet = snippet;
+  }
+
+  function isAwayFromCycle(cycle) {
+    if (!cycle) return false;
+    if (document.hidden) return true;
+    return conversationKey() !== cycle.sourceConversationKey;
+  }
+
+  async function sendCompletion(cycle) {
+    if (!cycle) return false;
 
     return core.deliverCompletionWithRetry({
-      completionId,
+      completionId: cycle.id,
       maxAttempts: 4,
       retryDelayMs: 500,
       ackTimeoutMs: 1500,
       send: (message) => chrome.runtime.sendMessage({
         ...message,
         provider: profile.provider,
-        ...readNotificationContext(),
+        chatTitle: cycle.chatTitle,
+        snippet: cycle.latestSnippet || '',
+        sourceTheme: cycle.sourceTheme,
+        sourceUrl: cycle.sourceUrl,
       }),
     });
+  }
+
+  function clearCycle() {
+    activeCycle = null;
+  }
+
+  function completeCycle(reason) {
+    const cycle = activeCycle;
+    if (!cycle) return false;
+
+    updateCyclePreview();
+
+    if (reason === 'stream' && tracker && typeof tracker.cancel === 'function') {
+      tracker.cancel();
+    }
+
+    clearCycle();
+
+    if (isAwayFromCycle(cycle)) {
+      void sendCompletion(cycle);
+    }
+
+    return true;
   }
 
   const tracker = new core.ResponseCycleTracker({
     stabilizeMs: STABILIZE_MS,
     setTimer: (fn, ms) => setTimeout(fn, ms),
     clearTimer: (id) => clearTimeout(id),
-    readGenerating: isGenerating,
+    readGenerating: isGeneratingForTracker,
     readCompletionMarkerCount: completionMarkerCount,
-    readAway: isAway,
-    onComplete: sendCompletion,
+    // Always invoke onComplete after a confirmed response. Whether an alert
+    // should be shown is decided from the cycle's original route below.
+    readAway: () => true,
+    onComplete: () => completeCycle('dom'),
   });
 
   function armResponseCycle() {
-    tracker.arm();
+    if (activeCycle) return false;
+
+    const armed = tracker.arm();
+    if (!armed) return false;
+
+    activeCycle = {
+      id: makeCycleId(),
+      sourceConversationKey: conversationKey(),
+      sourceUrl: currentUrl(),
+      chatTitle: readChatTitle(),
+      latestSnippet: readResponseSnippet(),
+      sourceTheme: readSourceTheme(),
+      streamTracked: false,
+    };
+
+    try {
+      window.postMessage({
+        source: STREAM_MESSAGE_SOURCE,
+        type: 'ARM_STREAM_TRACKER',
+        cycleId: activeCycle.id,
+        provider: profile.provider,
+      }, '*');
+    } catch (_) {}
+
+    return true;
   }
 
   function findSendControl(target) {
@@ -244,8 +352,30 @@
     armResponseCycle();
   }, true);
 
+  window.addEventListener('message', (event) => {
+    if (event.source && event.source !== window) return;
+
+    const data = event.data;
+    if (!data || data.source !== STREAM_MESSAGE_SOURCE || !activeCycle) return;
+    if (String(data.cycleId || '') !== activeCycle.id) return;
+
+    if (data.type === 'STREAM_TRACKING') {
+      activeCycle.streamTracked = true;
+      return;
+    }
+
+    if (data.type === 'STREAM_DONE') {
+      completeCycle('stream');
+    }
+  });
+
   function observeNow() {
-    if (isGenerating()) armResponseCycle();
+    updateCyclePreview();
+
+    if (readDomGenerating() && !activeCycle) {
+      armResponseCycle();
+    }
+
     tracker.observe();
   }
 
@@ -272,9 +402,12 @@
   document.addEventListener('visibilitychange', observeNow, { passive: true });
   window.addEventListener('focus', observeNow, { passive: true });
   window.addEventListener('blur', observeNow, { passive: true });
+  window.addEventListener('popstate', observeNow, { passive: true });
+  window.addEventListener('hashchange', observeNow, { passive: true });
 
   window.addEventListener('pagehide', () => {
     observer.disconnect();
     tracker.dispose();
+    clearCycle();
   }, { once: true });
 })();
