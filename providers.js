@@ -21,6 +21,10 @@
         '[data-message-author-role="assistant"]',
         '[data-testid="copy-turn-action-button"]',
       ],
+      responseText: [
+        '[data-message-author-role="assistant"] .markdown',
+        '[data-message-author-role="assistant"]',
+      ],
       prompt: [
         '#prompt-textarea',
         '[data-testid="prompt-textarea"]',
@@ -50,6 +54,10 @@
         'button[aria-label="Copy"]',
         'button[aria-label*="Copy" i]',
       ],
+      responseText: [
+        '.font-claude-response',
+        '[data-is-streaming] .font-claude-response',
+      ],
       prompt: [
         'div[contenteditable="true"].ProseMirror',
         'fieldset div[contenteditable="true"]',
@@ -78,6 +86,11 @@
         'model-response button[aria-label="Copy"]',
         'model-response button[aria-label*="Copy" i]',
         'button[aria-label="Copy"]',
+      ],
+      responseText: [
+        'model-response message-content',
+        'message-content',
+        'model-response',
       ],
       prompt: [
         'div.ql-editor',
