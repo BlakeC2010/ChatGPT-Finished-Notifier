@@ -4,7 +4,12 @@ const core = globalThis.ChatGPTNotifierBackgroundCore;
 const modeInputs = [...document.querySelectorAll('input[name="notificationMode"]')];
 const testButton = document.querySelector('#test-notification');
 const status = document.querySelector('#status');
+const versionLabel = document.querySelector('#version');
 const TEST_COOLDOWN_MS = 1400;
+
+if (versionLabel) {
+  versionLabel.textContent = 'v' + chrome.runtime.getManifest().version;
+}
 
 let testInFlight = false;
 let testCooldownUntil = 0;
