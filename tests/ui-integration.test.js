@@ -23,6 +23,7 @@ function runWelcomeHarness() {
   const status = makeElement();
   const writes = [];
   const messages = [];
+  const timers = [];
   const document = {
     querySelectorAll(selector) { return selector === 'input[name="notificationMode"]' ? radios : []; },
     querySelector(selector) {
@@ -35,6 +36,7 @@ function runWelcomeHarness() {
     globalThis: null,
     ChatGPTNotifierBackgroundCore: core,
     document,
+    setTimeout(fn, ms) { timers.push([fn, ms]); return timers.length; },
     chrome: {
       runtime: {
         lastError: null,
@@ -51,7 +53,7 @@ function runWelcomeHarness() {
   };
   context.globalThis = context;
   vm.runInNewContext(fs.readFileSync('welcome.js', 'utf8'), context, { filename: 'welcome.js' });
-  return { radios, testButton, status, writes, messages };
+  return { radios, testButton, status, writes, messages, timers };
 }
 
 function runToastHarness() {
@@ -99,6 +101,11 @@ function runToastHarness() {
   assert.equal(h.messages.at(-1).type, 'TEST_NOTIFICATION');
   assert.equal(h.messages.at(-1).mode, 'system');
   assert.match(h.status.textContent, /test notification/i);
+  assert.equal(h.testButton.disabled, true);
+  const messageCount = h.messages.length;
+  h.testButton.trigger('click');
+  assert.equal(h.messages.length, messageCount);
+  assert.equal(h.timers.at(-1)[1], 1400);
   console.log('PASS onboarding loads, saves, and tests notification preferences');
 }
 
