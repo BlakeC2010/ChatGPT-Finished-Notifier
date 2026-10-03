@@ -53,7 +53,7 @@
 
     const shadow = host.attachShadow({ mode: 'closed' });
 
-    shadow.innerHTML = \`
+    shadow.innerHTML = `
       <style>
         :host { all: initial; }
         * { box-sizing: border-box; }
@@ -207,7 +207,7 @@
           height: 2px;
           transform-origin: left;
           background: var(--accent);
-          animation: countdown \${AUTO_DISMISS_MS}ms linear forwards;
+          animation: countdown ${AUTO_DISMISS_MS}ms linear forwards;
         }
 
         @keyframes enter {
@@ -221,7 +221,7 @@
         }
       </style>
 
-      <section class="toast \${brand} \${theme}" role="status" aria-live="polite">
+      <section class="toast ${brand} ${theme}" role="status" aria-live="polite">
         <div class="top">
           <span class="dot" aria-hidden="true"></span>
           <span class="provider"></span>
@@ -232,7 +232,7 @@
         <button class="open" type="button">Open chat →</button>
         <div class="timer" aria-hidden="true"></div>
       </section>
-    \`;
+    `;
 
     shadow.querySelector('.provider').textContent = provider || 'AI Chat Notifications';
     shadow.querySelector('.title').textContent = title;
