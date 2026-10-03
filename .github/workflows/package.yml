@@ -8,12 +8,16 @@ on:
       - "providers.js"
       - "content-core.js"
       - "content.js"
+      - "stream-bridge.js"
       - "overlay.js"
       - "background-core.js"
       - "background.js"
       - "welcome.html"
       - "welcome.css"
       - "welcome.js"
+      - "popup.html"
+      - "popup.css"
+      - "popup.js"
       - "toast.html"
       - "toast.css"
       - "toast.js"
@@ -49,12 +53,16 @@ jobs:
             providers.js \
             content-core.js \
             content.js \
+            stream-bridge.js \
             overlay.js \
             background-core.js \
             background.js \
             welcome.html \
             welcome.css \
-            welcome.js
+            welcome.js \
+            popup.html \
+            popup.css \
+            popup.js
           cp "dist/AI-Chat-Notifications-v$VERSION.zip" dist/AI-Chat-Notifications-latest.zip
 
       - name: Commit packaged ZIP
