@@ -26,7 +26,7 @@
     <main class="article-page">
       <div class="eyebrow">Support</div>
       <h1>Help when something doesn't behave.</h1>
-      <p class="article-meta">AI Chat Notifications · v1.3.3</p>
+      <p class="article-meta">AI Chat Notifications · v1.3.4</p>
 
       <h2>Supported AI chats</h2>
       <p>ChatGPT, Claude, and Gemini.</p>
@@ -36,7 +36,7 @@
       <p>If you use System mode, make sure Chrome notifications are enabled in your operating system. On Windows 11, also check <strong>Settings → System → Notifications → Do not disturb</strong>.</p>
 
       <h2>The in-page browser alert does not appear</h2>
-      <p>Open the extension's options page and confirm that the notification mode is set to <strong>Auto</strong> or <strong>Browser alert</strong>. Chrome internal pages such as <code>chrome://extensions</code> cannot host webpage overlays, so the extension falls back to a system notification there.</p>
+      <p>Open the extension's options page and confirm that the notification mode is set to <strong>Auto</strong> or <strong>Browser alert</strong>. Browser alerts are injected on demand into normal HTTP and HTTPS pages, including tabs that were already open. Chrome internal pages such as <code>chrome://extensions</code> and the New Tab page cannot host overlays, so the extension uses a system notification there.</p>
 
       <h2>The extension stopped detecting responses</h2>
       <p>Refresh the affected AI chat tab after updating or reinstalling the extension. If one provider changes its website controls, detection for that provider may need an update.</p>
