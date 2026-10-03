@@ -34,14 +34,36 @@ function ensureContentScriptsOnOpenTabs() {
 
 ensureContentScriptsOnOpenTabs();
 
+
 function cleanProvider(provider) {
   const value = String(provider || '').trim();
   return KNOWN_PROVIDERS.has(value) ? value : '';
 }
 
-function clearNotification(notificationId) {
+function cleanText(value, maxLength) {
+  const text = String(value || '').replace(/\s+/g, ' ').trim();
+  if (!text) return '';
+  if (text.length <= maxLength) return text;
+  return text.slice(0, maxLength - 1).trimEnd() + '…';
+}
+
+function cleanTheme(value) {
+  return value === 'dark' || value === 'light' ? value : '';
+}
+
+function notificationData(input = {}) {
+  return {
+    provider: cleanProvider(input.provider),
+    chatTitle: cleanText(input.chatTitle, 90),
+    snippet: cleanText(input.snippet, 180),
+    sourceTheme: cleanTheme(input.sourceTheme),
+  };
+}
+
+function clearNotification(notificationId, callback) {
   chrome.notifications.clear(notificationId, () => {
     void chrome.runtime.lastError;
+    callback?.();
   });
 }
 
@@ -59,22 +81,16 @@ function focusTab(tabId, callback) {
   });
 }
 
-function notificationCopy(provider) {
-  const name = cleanProvider(provider);
-  if (!name) {
-    return {
-      title: 'Response ready',
-      message: 'Your AI chat finished responding.',
-    };
-  }
+function notificationCopy(data) {
+  const title = data.chatTitle
+    || (data.provider ? data.provider + ' response ready' : 'Response ready');
+  const message = data.snippet
+    || (data.provider ? data.provider + ' finished responding.' : 'Your AI chat finished responding.');
 
-  return {
-    title: name + ' response ready',
-    message: name + ' finished responding.',
-  };
+  return { title, message };
 }
 
-function createSystemNotification(tabId, completionId, provider, callback) {
+function createSystemNotification(tabId, completionId, data, callback) {
   let notificationId;
   try {
     notificationId = core.makeNotificationId(tabId, completionId);
@@ -83,20 +99,50 @@ function createSystemNotification(tabId, completionId, provider, callback) {
     return;
   }
 
-  const copy = notificationCopy(provider);
-  chrome.notifications.create(notificationId, {
-    type: 'basic',
-    iconUrl: NOTIFICATION_ICON,
-    title: copy.title,
-    message: copy.message,
-    contextMessage: 'Click to return to your chat',
-    buttons: [{ title: 'Open chat' }],
-  }, () => {
-    callback(!chrome.runtime.lastError);
+  const copy = notificationCopy(data);
+  const contextMessage = data.provider
+    ? data.provider + ' · Click to open chat'
+    : 'Click to open chat';
+
+  clearNotification(notificationId, () => {
+    chrome.notifications.create(notificationId, {
+      type: 'basic',
+      iconUrl: NOTIFICATION_ICON,
+      title: copy.title,
+      message: copy.message,
+      contextMessage,
+      buttons: [{ title: 'Open chat' }],
+    }, () => {
+      callback(!chrome.runtime.lastError);
+    });
   });
 }
 
-function createInlineToast(sourceTabId, provider, focusedWindow, callback) {
+function showInlineToastInTab(activeTabId, sourceTabId, data, callback) {
+  chrome.scripting.executeScript({
+    target: { tabId: activeTabId },
+    files: ['overlay.js'],
+  }, () => {
+    if (chrome.runtime.lastError) {
+      callback(false);
+      return;
+    }
+
+    chrome.tabs.sendMessage(activeTabId, {
+      type: 'SHOW_INLINE_TOAST',
+      sourceTabId,
+      provider: data.provider,
+      chatTitle: data.chatTitle,
+      snippet: data.snippet,
+      sourceTheme: data.sourceTheme,
+    }, (response) => {
+      const ok = !chrome.runtime.lastError && response && response.ok === true;
+      callback(Boolean(ok));
+    });
+  });
+}
+
+function createInlineToast(sourceTabId, data, focusedWindow, callback) {
   if (!focusedWindow || !Number.isInteger(focusedWindow.id)) {
     callback(false);
     return;
@@ -114,18 +160,13 @@ function createInlineToast(sourceTabId, provider, focusedWindow, callback) {
       return;
     }
 
-    chrome.tabs.sendMessage(activeTab.id, {
-      type: 'SHOW_INLINE_TOAST',
-      sourceTabId,
-      provider: cleanProvider(provider),
-    }, (response) => {
-      const ok = !chrome.runtime.lastError && response && response.ok === true;
-      callback(Boolean(ok));
-    });
+    showInlineToastInTab(activeTab.id, sourceTabId, data, callback);
   });
 }
 
-function deliverNotification(tabId, completionId, requestedMode, provider, callback) {
+function deliverNotification(tabId, completionId, requestedMode, rawData, callback) {
+  const data = notificationData(rawData);
+
   chrome.storage.sync.get({ notificationMode: 'auto' }, (settings) => {
     const storedMode = settings && settings.notificationMode;
     const mode = core.normalizeNotificationMode(requestedMode || storedMode);
@@ -136,20 +177,18 @@ function deliverNotification(tabId, completionId, requestedMode, provider, callb
       const deliveryMode = core.chooseDeliveryMode(mode, Boolean(focusedWindow));
 
       if (deliveryMode === 'browser') {
-        createInlineToast(tabId, provider, focusedWindow, (ok) => {
+        createInlineToast(tabId, data, focusedWindow, (ok) => {
           if (ok) {
             callback(true);
             return;
           }
 
-          // Chrome internal pages and other restricted URLs cannot host a content script.
-          // Fall back to a native notification instead of opening a separate popup window.
-          createSystemNotification(tabId, completionId, provider, callback);
+          createSystemNotification(tabId, completionId, data, callback);
         });
         return;
       }
 
-      createSystemNotification(tabId, completionId, provider, callback);
+      createSystemNotification(tabId, completionId, data, callback);
     });
   });
 }
@@ -173,11 +212,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.type === 'TEST_NOTIFICATION') {
-    const completionId = 'test-' + Date.now().toString(36);
+    const completionId = 'test';
+    const testData = {
+      chatTitle: 'Test notification',
+      snippet: 'This is what a finished AI response will look like.',
+      sourceTheme: 'dark',
+    };
     const senderTabId = sender.tab && Number.isInteger(sender.tab.id) ? sender.tab.id : null;
 
     if (senderTabId !== null) {
-      deliverNotification(senderTabId, completionId, message.mode, '', (ok) => sendResponse({ ok }));
+      deliverNotification(senderTabId, completionId, message.mode, testData, (ok) => sendResponse({ ok }));
       return true;
     }
 
@@ -188,24 +232,30 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         sendResponse({ ok: false });
         return;
       }
-      deliverNotification(tabId, completionId, message.mode, '', (ok) => sendResponse({ ok }));
+      deliverNotification(tabId, completionId, message.mode, testData, (ok) => sendResponse({ ok }));
     });
     return true;
   }
 
   if (!sender.tab || !Number.isInteger(sender.tab.id)) return false;
-
   if (message.type !== 'CHATGPT_RESPONSE_COMPLETE') return false;
 
   const completionId = typeof message.completionId === 'string'
     ? message.completionId.trim()
     : '';
+
   if (!completionId) {
     sendResponse({ ok: false });
     return false;
   }
 
-  deliverNotification(sender.tab.id, completionId, null, message.provider, (ok) => sendResponse({ ok }));
+  deliverNotification(sender.tab.id, completionId, null, {
+    provider: message.provider,
+    chatTitle: message.chatTitle,
+    snippet: message.snippet,
+    sourceTheme: message.sourceTheme,
+  }, (ok) => sendResponse({ ok }));
+
   return true;
 });
 
