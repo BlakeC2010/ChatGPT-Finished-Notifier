@@ -181,11 +181,18 @@
       }, this.stabilizeMs);
     }
 
+    cancel() {
+      if (this.disposed) return;
+      this.#cancelPending();
+      this.armed = false;
+      this.sawGenerating = false;
+      this.baselineCompletionCount = 0;
+    }
+
     dispose() {
       if (this.disposed) return;
       this.disposed = true;
-      this.#cancelPending();
-      this.armed = false;
+      this.cancel();
     }
 
     #readCompletionCount() {
