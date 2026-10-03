@@ -424,7 +424,11 @@
     }
 
     if (data.type === 'STREAM_DONE') {
-      completeCycle('stream');
+      const cycleId = activeCycle.id;
+      setTimeout(() => {
+        if (!activeCycle || activeCycle.id !== cycleId) return;
+        completeCycle('stream');
+      }, 300);
     }
   });
 
