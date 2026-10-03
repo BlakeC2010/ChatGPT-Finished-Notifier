@@ -154,3 +154,19 @@ run('arming twice during the same submission does not reset the completion basel
 
   assert.equal(state.completions, 1);
 });
+
+run('cancel disarms a response cycle so external stream completion cannot double-notify', () => {
+  const state = makeTrackerState();
+  const timers = makeManualTimers();
+  const tracker = makeTracker(state, timers);
+
+  tracker.arm();
+  state.generating = true;
+  tracker.observe();
+  tracker.cancel();
+  state.generating = false;
+  tracker.observe();
+  timers.flushAll();
+
+  assert.equal(state.completions, 0);
+});
