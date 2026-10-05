@@ -30,16 +30,15 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-      - name: Record tested source
-        run: git rev-parse HEAD
+      - name: Record checked-out source
+        env:
+          AI_NOTIFIER_SOURCE_REF: ${{ inputs.source_ref }}
+        run: node -e "console.log('Extension source ref:', process.env.AI_NOTIFIER_SOURCE_REF)"
       - name: Run full extension suite
         run: node --test
       - name: Package and verify extension ZIP
         id: package
-        run: python scripts/package-extension.py
+        run: node scripts/package-extension.js
       - name: Upload verified extension
         uses: actions/upload-artifact@v4
         with:

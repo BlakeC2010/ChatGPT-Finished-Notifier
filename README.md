@@ -36,4 +36,4 @@ Version 1.4.0 adds toolbar popup settings, provider-branded notification icons, 
 
 ## Test and package
 
-Run `node --test` for the full test suite. The reusable test and package workflows execute on the Windows Z-server runner through the existing `ChatGPT-Repo-Creator` control repository. The package job verifies the source before uploading the extension ZIP; it does not use a hosted build runner.
+Run `node --test` for the full test suite, then `node scripts/package-extension.js` to produce the extension ZIP. Packaging requires only Node; it works on the Windows Z-server runner without installing Python or requiring Git in the runner's PATH. The package tests extract the ZIP using the operating system's separate ZIP reader and compare every runtime file. The reusable test and package workflows execute on the Windows Z-server runner through the existing `ChatGPT-Repo-Creator` control repository. The package job verifies the source before uploading the extension ZIP; it does not use a hosted build runner.
