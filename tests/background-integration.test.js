@@ -3,11 +3,15 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 const core = require('../background-core.js');
+const test = require('node:test');
 
 function buildHarness({
   mode = 'auto',
   windows = [{ id: 1, left: 0, top: 0, width: 1200, height: 800, focused: true }],
   tabMessageFails = false,
+  deferOverlayInjection = false,
+  deferNotificationClear = false,
+  sourceTab = { id: 42, windowId: 1, active: false, url: 'https://chatgpt.com/c/source-chat' },
 } = {}) {
   const listeners = { message: null, installed: null, clicked: null, buttonClicked: null };
   const calls = {
@@ -20,11 +24,15 @@ function buildHarness({
     scriptsInjected: [],
   };
   const sessionStore = {};
+  const overlayCallbacks = [];
+  const clearCallbacks = [];
 
   const context = {
     globalThis: null,
     ChatGPTNotifierBackgroundCore: core,
-    importScripts() {},
+    importScripts(...paths) {
+      for (const path of paths) vm.runInNewContext(fs.readFileSync(path, 'utf8'), context, { filename: path });
+    },
     URL,
     Date,
     console,
@@ -51,6 +59,10 @@ function buildHarness({
       scripting: {
         executeScript(opts, cb) {
           calls.scriptsInjected.push(opts);
+          if (deferOverlayInjection && opts.files.includes('overlay.js')) {
+            overlayCallbacks.push(cb);
+            return;
+          }
           cb?.([]);
         },
       },
@@ -62,6 +74,16 @@ function buildHarness({
         },
       },
       tabs: {
+        get(id, cb) {
+          if (!sourceTab) {
+            context.chrome.runtime.lastError = { message: 'No tab with id: ' + id };
+            cb(undefined);
+            context.chrome.runtime.lastError = null;
+            return;
+          }
+          context.chrome.runtime.lastError = null;
+          cb({ ...sourceTab, id });
+        },
         create(opts, cb) { calls.tabsCreated.push(opts); cb?.({ id: 77 }); },
         query(_opts, cb) { cb?.([{ id: 77, windowId: 1 }]); },
         sendMessage(id, message, cb) {
@@ -85,7 +107,11 @@ function buildHarness({
           context.chrome.runtime.lastError = null;
           cb?.(id);
         },
-        clear(id, cb) { calls.cleared.push(id); cb?.(true); },
+        clear(id, cb) {
+          calls.cleared.push(id);
+          if (deferNotificationClear) clearCallbacks.push(cb);
+          else cb?.(true);
+        },
         onClicked: { addListener(fn) { listeners.clicked = fn; } },
         onButtonClicked: { addListener(fn) { listeners.buttonClicked = fn; } },
       },
@@ -94,7 +120,12 @@ function buildHarness({
 
   context.globalThis = context;
   vm.runInNewContext(fs.readFileSync('background.js', 'utf8'), context, { filename: 'background.js' });
-  return { listeners, calls, sessionStore };
+  return {
+    listeners, calls, sessionStore,
+    setSourceTab(value) { sourceTab = value; },
+    flushOverlayInjection() { for (const cb of overlayCallbacks.splice(0)) cb?.([]); },
+    flushNotificationClear() { for (const cb of clearCallbacks.splice(0)) cb?.(true); },
+  };
 }
 
 function send(h, message, sender = { tab: { id: 42 } }) {
@@ -212,3 +243,74 @@ function send(h, message, sender = { tab: { id: 42 } }) {
     console.log('PASS test notifications reuse one system notification id');
   }
 })();
+
+for (const mode of ['auto', 'browser', 'system']) {
+  test(mode + ' suppresses a late completion after returning to the visible source chat', async () => {
+    const h = buildHarness({ mode, sourceTab: {
+      id: 42, windowId: 1, active: true, url: 'https://chatgpt.com/c/source-chat',
+    } });
+    const response = await send(h, {
+      type: 'CHATGPT_RESPONSE_COMPLETE', completionId: 'late', provider: 'ChatGPT',
+      sourceUrl: 'https://chatgpt.com/c/source-chat',
+    });
+    assert.equal(response.ok, true, 'suppression must acknowledge the cycle to prevent retries');
+    assert.equal(h.calls.notifications.length, 0);
+    assert.equal(h.calls.tabsMessages.length, 0);
+  });
+}
+
+test('a source chat still visible on an unfocused monitor stays quiet', async () => {
+  const h = buildHarness({ mode: 'system', windows: [{ id: 1, focused: false, state: 'normal' }],
+    sourceTab: { id: 42, windowId: 1, active: true, url: 'https://chatgpt.com/c/source-chat' } });
+  await send(h, { type: 'CHATGPT_RESPONSE_COMPLETE', completionId: 'visible', provider: 'ChatGPT',
+    sourceUrl: 'https://chatgpt.com/c/source-chat' });
+  assert.equal(h.calls.notifications.length, 0);
+});
+
+test('switching conversations in the same active tab still allows the original completion alert', async () => {
+  const h = buildHarness({ mode: 'system', sourceTab: {
+    id: 42, windowId: 1, active: true, url: 'https://chatgpt.com/c/other-chat',
+  } });
+  await send(h, { type: 'CHATGPT_RESPONSE_COMPLETE', completionId: 'other-chat', provider: 'ChatGPT',
+    sourceUrl: 'https://chatgpt.com/c/source-chat' });
+  assert.equal(h.calls.notifications.length, 1);
+});
+
+test('a minimized source window may still receive a completion notification', async () => {
+  const h = buildHarness({ mode: 'system', windows: [{ id: 1, focused: false, state: 'minimized' }],
+    sourceTab: { id: 42, windowId: 1, active: true, url: 'https://chatgpt.com/c/source-chat' } });
+  await send(h, { type: 'CHATGPT_RESPONSE_COMPLETE', completionId: 'minimized', provider: 'ChatGPT',
+    sourceUrl: 'https://chatgpt.com/c/source-chat' });
+  assert.equal(h.calls.notifications.length, 1);
+});
+
+test('a completion whose source tab has been closed is quietly acknowledged', async () => {
+  const h = buildHarness({ mode: 'system', sourceTab: null });
+  const response = await send(h, { type: 'CHATGPT_RESPONSE_COMPLETE', completionId: 'closed', provider: 'ChatGPT',
+    sourceUrl: 'https://chatgpt.com/c/source-chat' });
+  assert.equal(response.ok, true);
+  assert.equal(h.calls.notifications.length, 0);
+});
+
+for (const mode of ['auto', 'browser']) {
+  test(mode + ' suppresses a completion when the source becomes visible during overlay injection', async () => {
+    const h = buildHarness({ mode, deferOverlayInjection: true });
+    const pending = send(h, { type: 'CHATGPT_RESPONSE_COMPLETE', completionId: 'injection-race',
+      provider: 'ChatGPT', sourceUrl: 'https://chatgpt.com/c/source-chat' });
+    h.setSourceTab({ id: 42, windowId: 1, active: true, url: 'https://chatgpt.com/c/source-chat' });
+    h.flushOverlayInjection();
+    assert.equal((await pending).ok, true);
+    assert.equal(h.calls.tabsMessages.length, 0);
+    assert.equal(h.calls.notifications.length, 0);
+  });
+}
+
+test('system delivery suppresses a completion when the source becomes visible during notification setup', async () => {
+  const h = buildHarness({ mode: 'system', deferNotificationClear: true });
+  const pending = send(h, { type: 'CHATGPT_RESPONSE_COMPLETE', completionId: 'system-race',
+    provider: 'ChatGPT', sourceUrl: 'https://chatgpt.com/c/source-chat' });
+  h.setSourceTab({ id: 42, windowId: 1, active: true, url: 'https://chatgpt.com/c/source-chat' });
+  h.flushNotificationClear();
+  assert.equal((await pending).ok, true);
+  assert.equal(h.calls.notifications.length, 0);
+});

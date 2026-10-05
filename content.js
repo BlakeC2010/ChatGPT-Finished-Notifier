@@ -25,7 +25,7 @@
     '[data-testid*="send" i]',
     '[data-test-id*="send" i]',
   ];
-  const GENERIC_PROMPT_SELECTORS = [
+  const GENERIC_PROMPT_SELECTORS = profile.provider === 'ChatGPT' ? [] : [
     'textarea',
     '[contenteditable="true"][role="textbox"]',
     '[contenteditable="true"]',
@@ -40,6 +40,7 @@
   const STREAM_CYCLE_ATTR = 'data-ai-chat-notifier-cycle';
 
   let activeCycle = null;
+  let ignoreGenerationUntilIdle = false;
 
   function controlDescriptor(element) {
     return {
@@ -83,9 +84,7 @@
 
   function conversationKey() {
     try {
-      const origin = location.origin || '';
-      const pathname = location.pathname || '/';
-      return origin + pathname.replace(/\/+$/, '');
+      return providers.conversationKeyFromUrl(currentUrl());
     } catch (_) {
       return '';
     }
@@ -98,7 +97,9 @@
   function startsOnNewChatRoute() {
     try {
       const path = location.pathname || '/';
-      if (profile.provider === 'ChatGPT') return path === '/' || path === '/new';
+      if (profile.provider === 'ChatGPT') {
+        return path === '/' || path === '/new' || /^\/g\/[^/]+(?:\/project)?\/?$/.test(path);
+      }
       if (profile.provider === 'Claude') return path === '/' || path === '/new';
       if (profile.provider === 'Gemini') return path === '/' || path === '/app' || path === '/app/';
     } catch (_) {}
@@ -109,6 +110,13 @@
     if (!activeCycle || !activeCycle.startedOnNewChat) return;
     const currentKey = conversationKey();
     if (!currentKey || currentKey === activeCycle.sourceConversationKey) return;
+
+    if (profile.provider === 'ChatGPT') {
+      const path = location.pathname || '';
+      if (!/^(?:\/g\/[^/]+)?\/c\/[^/]+\/?$/.test(path)) return;
+      const starter = new URL(activeCycle.sourceUrl).pathname.match(/^\/g\/[^/]+/);
+      if (starter && !path.startsWith(starter[0] + '/c/')) return;
+    }
 
     const age = Date.now() - activeCycle.startedAt;
     if (age > 15000) {
@@ -122,17 +130,21 @@
   }
 
   function isGeneratingForTracker() {
+    if (activeCycle?.streamTracked && !activeCycle.streamFinished) return true;
     if (activeCycle && !sourceStillOpen(activeCycle)) {
       // Navigating to another chat removes the old response DOM immediately.
       // Keep the tracker armed until the page-world stream bridge confirms the
       // original request actually finished.
-      return true;
+      return !activeCycle.streamFinished;
     }
     return readDomGenerating();
   }
 
   function completionMarkerCount() {
-    const markers = new Set(document.querySelectorAll(COMPLETION_MARKER_SELECTOR));
+    const markers = new Set([...document.querySelectorAll(COMPLETION_MARKER_SELECTOR)]
+      .filter((element) => core.isElementVisible(element, typeof getComputedStyle === 'function' ? getComputedStyle : null)));
+
+    if (profile.provider === 'ChatGPT') return markers.size;
 
     for (const element of document.querySelectorAll(CONTROL_SELECTOR)) {
       if (!isUsableControl(element)) continue;
@@ -294,6 +306,12 @@
     }
   }
 
+  function cancelResponseCycle() {
+    ignoreGenerationUntilIdle = true;
+    tracker.cancel();
+    clearCycle();
+  }
+
   function completeCycle(reason) {
     const cycle = activeCycle;
     if (!cycle) return false;
@@ -339,6 +357,7 @@
       latestSnippet: readResponseSnippet(),
       sourceTheme: readSourceTheme(),
       streamTracked: false,
+      streamFinished: false,
       startedAt: Date.now(),
       startedOnNewChat: startsOnNewChatRoute(),
     };
@@ -364,12 +383,21 @@
   function findSendControl(target) {
     if (!target || typeof target.closest !== 'function') return null;
 
-    const matched = target.closest(SEND_SELECTOR);
-    if (isUsableControl(matched)) return matched;
+    const specificSelector = profile.provider === 'ChatGPT'
+      ? '#composer-submit-button, [data-testid="send-button"]'
+      : profile.send.join(', ');
+    const specific = target.closest(specificSelector);
+    if (isUsableControl(specific) && !core.isStopControlDescriptor(controlDescriptor(specific))) {
+      return specific;
+    }
 
-    const control = target.closest(CONTROL_SELECTOR);
+    const matched = target.closest(SEND_SELECTOR);
+    const control = matched || target.closest(CONTROL_SELECTOR);
     if (!isUsableControl(control)) return null;
-    return providers.isSendControlDescriptor(controlDescriptor(control)) ? control : null;
+    if (core.isStopControlDescriptor(controlDescriptor(control))) return null;
+    const form = control.closest('form');
+    if (!form?.querySelector(PROMPT_SELECTOR)) return null;
+    return matched || (providers.isSendControlDescriptor(controlDescriptor(control)) ? control : null);
   }
 
   function findPromptEditor(target) {
@@ -380,6 +408,9 @@
   function editorCanSubmit(editor) {
     if (!editor) return false;
 
+    const text = typeof editor.value === 'string' ? editor.value : editor.textContent;
+    if (!String(text || '').trim()) return false;
+
     const form = typeof editor.closest === 'function' ? editor.closest('form') : null;
     const sendControl = form && typeof form.querySelector === 'function'
       ? form.querySelector(SEND_SELECTOR)
@@ -387,11 +418,34 @@
 
     if (sendControl) return isUsableControl(sendControl);
 
-    const text = typeof editor.value === 'string' ? editor.value : editor.textContent;
-    return String(text || '').trim().length > 0;
+    return true;
   }
 
   document.addEventListener('click', (event) => {
+    if (profile.provider === 'ChatGPT' && activeCycle?.startedOnNewChat
+      && (event.button == null || event.button === 0)
+      && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey && !event.defaultPrevented
+      && typeof event.target?.closest === 'function') {
+      const link = event.target.closest('a[href]');
+      const target = String(link?.getAttribute?.('target') || '').toLowerCase();
+      if (link && (!target || target === '_self') && !link.hasAttribute?.('download')) {
+        try {
+          const destination = new URL(link.href || link.getAttribute?.('href'), currentUrl());
+          if (destination.origin === location.origin
+            && providers.conversationKeyFromUrl(destination.href) !== conversationKey()) {
+            // Current-tab navigation is distinct from a new chat's assigned URL.
+            activeCycle.startedOnNewChat = false;
+          }
+        } catch (_) {}
+      }
+    }
+    if (profile.provider === 'ChatGPT' && sourceStillOpen() && typeof event.target?.closest === 'function') {
+      const control = event.target.closest(STOP_SELECTOR) || event.target.closest(CONTROL_SELECTOR);
+      if (isUsableControl(control) && core.isStopControlDescriptor(controlDescriptor(control))) {
+        cancelResponseCycle();
+        return;
+      }
+    }
     if (findSendControl(event.target)) armResponseCycle();
   }, true);
 
@@ -407,7 +461,8 @@
   document.addEventListener('submit', (event) => {
     const form = event.target;
     if (!form || typeof form.querySelector !== 'function') return;
-    if (!form.querySelector(PROMPT_SELECTOR) && !form.querySelector(SEND_SELECTOR)) return;
+    const editor = form.querySelector(PROMPT_SELECTOR);
+    if (!editor || !editorCanSubmit(editor)) return;
     armResponseCycle();
   }, true);
 
@@ -420,22 +475,28 @@
 
     if (data.type === 'STREAM_TRACKING') {
       activeCycle.streamTracked = true;
+      tracker.observe();
       return;
     }
 
-    if (data.type === 'STREAM_DONE') {
-      const cycleId = activeCycle.id;
-      setTimeout(() => {
-        if (!activeCycle || activeCycle.id !== cycleId) return;
-        completeCycle('stream');
-      }, 300);
+    if (data.type === 'STREAM_CANCELLED') {
+      cancelResponseCycle();
+      return;
+    }
+
+    if (data.type === 'STREAM_DONE' && activeCycle.streamTracked) {
+      activeCycle.streamFinished = true;
+      updateCyclePreview();
+      tracker.observe();
     }
   });
 
   function observeNow() {
     updateCyclePreview();
 
-    if (readDomGenerating() && !activeCycle) {
+    const generating = readDomGenerating();
+    if (!generating) ignoreGenerationUntilIdle = false;
+    if (generating && !activeCycle && !ignoreGenerationUntilIdle) {
       armResponseCycle();
     }
 
@@ -465,7 +526,10 @@
   document.addEventListener('visibilitychange', observeNow, { passive: true });
   window.addEventListener('focus', observeNow, { passive: true });
   window.addEventListener('blur', observeNow, { passive: true });
-  window.addEventListener('popstate', observeNow, { passive: true });
+  window.addEventListener('popstate', () => {
+    if (profile.provider === 'ChatGPT' && activeCycle) activeCycle.startedOnNewChat = false;
+    observeNow();
+  }, { passive: true });
   window.addEventListener('hashchange', observeNow, { passive: true });
 
   window.addEventListener('pagehide', () => {

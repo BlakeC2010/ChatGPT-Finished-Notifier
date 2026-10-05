@@ -6,19 +6,18 @@
 
   const SOURCE = 'ai-chat-notifications';
   const CYCLE_ATTR = 'data-ai-chat-notifier-cycle';
-  let activeCycle = null;
 
   function readCycleFromDom() {
     try {
       const raw = document.documentElement?.getAttribute(CYCLE_ATTR);
-      if (!raw) return activeCycle;
+      if (!raw) return null;
       const parsed = JSON.parse(raw);
       const cycleId = String(parsed?.cycleId || '');
       const provider = String(parsed?.provider || '');
-      if (!cycleId || !provider) return activeCycle;
+      if (!cycleId || !provider) return null;
       return { cycleId, provider, armedAt: Number(parsed.armedAt) || Date.now() };
     } catch (_) {
-      return activeCycle;
+      return null;
     }
   }
 
@@ -43,9 +42,18 @@
     const value = url.toLowerCase();
 
     if (provider === 'ChatGPT') {
-      return value.includes('/backend-api/conversation')
-        || value.includes('/backend-anon/conversation')
-        || value.includes('/backend-api/f/conversation');
+      try {
+        const request = new URL(url);
+        const paths = new Set([
+          '/backend-api/conversation',
+          '/backend-anon/conversation',
+          '/backend-api/f/conversation',
+        ]);
+        return request.hostname === 'chatgpt.com'
+          && paths.has(request.pathname.replace(/\/$/, ''));
+      } catch (_) {
+        return false;
+      }
     }
 
     if (provider === 'Claude') {
@@ -71,22 +79,6 @@
     }, '*');
   }
 
-  window.addEventListener('message', (event) => {
-    if (event.source !== window) return;
-    const data = event.data;
-    if (!data || data.source !== SOURCE || data.type !== 'ARM_STREAM_TRACKER') return;
-
-    const cycleId = String(data.cycleId || '');
-    const provider = String(data.provider || '');
-    if (!cycleId || !provider) return;
-
-    activeCycle = {
-      cycleId,
-      provider,
-      armedAt: Date.now(),
-    };
-  });
-
   const originalFetch = window.fetch;
   if (typeof originalFetch !== 'function') {
     globalThis.AIChatNotificationStreamBridge = { isLikelyResponseRequest };
@@ -98,10 +90,27 @@
     const cycle = liveCycle ? { ...liveCycle } : null;
     const url = urlOf(args[0]);
     const method = normalizeMethod(args[0], args[1]);
-    const response = await originalFetch.apply(this, args);
+    const trackedRequest = cycle && isLikelyResponseRequest(cycle.provider, url, method);
+    let response;
+    try {
+      response = await originalFetch.apply(this, args);
+    } catch (error) {
+      if (trackedRequest) post('STREAM_CANCELLED', cycle.cycleId);
+      throw error;
+    }
 
-    if (!cycle || !isLikelyResponseRequest(cycle.provider, url, method)) {
+    if (!trackedRequest) {
       return response;
+    }
+
+    if (!response.ok) {
+      post('STREAM_CANCELLED', cycle.cycleId);
+      return response;
+    }
+
+    if (cycle.provider === 'ChatGPT') {
+      const contentType = response.headers.get('content-type') || '';
+      if (!/^text\/event-stream(?:\s*;|\s*$)/i.test(contentType)) return response;
     }
 
     post('STREAM_TRACKING', cycle.cycleId);
@@ -110,10 +119,10 @@
       const clone = response.clone();
       Promise.resolve(clone.text()).then(
         () => post('STREAM_DONE', cycle.cycleId),
-        () => post('STREAM_DONE', cycle.cycleId),
+        () => post('STREAM_CANCELLED', cycle.cycleId),
       );
     } catch (_) {
-      post('STREAM_DONE', cycle.cycleId);
+      post('STREAM_CANCELLED', cycle.cycleId);
     }
 
     return response;

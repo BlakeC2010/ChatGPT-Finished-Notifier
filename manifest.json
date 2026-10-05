@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "AI Chat Notifications",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "description": "Get notified when ChatGPT, Claude, or Gemini finishes responding.",
   "permissions": [
     "notifications",

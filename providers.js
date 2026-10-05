@@ -18,7 +18,6 @@
         'button[aria-label="Send"]',
       ],
       completion: [
-        '[data-message-author-role="assistant"]',
         '[data-testid="copy-turn-action-button"]',
       ],
       responseText: [
@@ -33,8 +32,6 @@
       prompt: [
         '#prompt-textarea',
         '[data-testid="prompt-textarea"]',
-        'textarea',
-        '[contenteditable="true"]',
       ],
     },
     {
@@ -130,6 +127,20 @@
     return PROFILES.find((profile) => profile.hosts.includes(host)) || null;
   }
 
+  function conversationKeyFromUrl(value) {
+    try {
+      const url = new URL(String(value || ''));
+      const path = url.pathname.replace(/\/+$/, '');
+      if (url.hostname === 'chatgpt.com') {
+        const conversation = path.match(/\/c\/([^/]+)(?:\/|$)/);
+        if (conversation) return url.origin + '/c/' + conversation[1];
+      }
+      return url.origin + path;
+    } catch (_) {
+      return '';
+    }
+  }
+
   function descriptorText(descriptor = {}) {
     return [descriptor.testId, descriptor.ariaLabel, descriptor.title, descriptor.text]
       .map(normalize)
@@ -160,5 +171,6 @@
     getProfile,
     isSendControlDescriptor,
     isCompletionMarkerDescriptor,
+    conversationKeyFromUrl,
   };
 })(typeof globalThis !== 'undefined' ? globalThis : self);

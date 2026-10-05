@@ -1,26 +1,30 @@
-name: Test Extension
+name: Test Extension on Z-server
 
 on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
+  workflow_call:
+    inputs:
+      source_ref:
+        type: string
+        required: true
 
 permissions:
   contents: read
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Windows, X64]
+    timeout-minutes: 10
+    defaults:
+      run:
+        shell: cmd
     steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-
-      - name: Run tests
-        shell: bash
-        run: |
-          set -e
-          for test_file in tests/*.test.js; do
-            echo "== $test_file =="
-            node "$test_file"
-          done
+      - uses: actions/checkout@v4
+        with:
+          repository: BlakeC2010/ChatGPT-Finished-Notifier
+          ref: ${{ inputs.source_ref }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Run full extension suite
+        run: node --test

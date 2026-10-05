@@ -4,6 +4,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 const core = require('../content-core.js');
+const test = require('node:test');
 
 function buildHarness({
   hostname = 'chatgpt.com',
@@ -20,6 +21,7 @@ function buildHarness({
   const state = {
     generating: false,
     completionMarkers: 0,
+    assistantContainers: 0,
     hidden: false,
     focused: true,
     sends: [],
@@ -44,6 +46,7 @@ function buildHarness({
       return null;
     },
     closest(selector) {
+      if (selector === 'form') return composerForm;
       return selector.includes('send-button') ? this : null;
     },
   };
@@ -57,9 +60,33 @@ function buildHarness({
     },
     closest(selector) {
       if (selector.includes('prompt-textarea') || selector.includes('textarea')) return this;
-      if (selector === 'form') return null;
+      if (selector === 'form') return composerForm;
       return null;
     },
+  };
+
+  const composerForm = {
+    querySelector(selector) {
+      if (selector.includes('prompt-textarea') || selector.includes('textarea')) return editor;
+      if (selector.includes('send-button')) return sendButton;
+      return null;
+    },
+  };
+
+  const stopButton = {
+    disabled: false,
+    hidden: false,
+    textContent: '',
+    getAttribute(name) { return name === 'data-testid' ? 'stop-button' : null; },
+    closest(selector) {
+      return selector.includes('stop-button') || selector === 'button, [role="button"]' ? this : null;
+    },
+  };
+
+  const copyButton = {
+    disabled: false,
+    hidden: false,
+    getAttribute(name) { return name === 'data-testid' ? 'copy-turn-action-button' : null; },
   };
 
   const responseElement = {
@@ -90,12 +117,18 @@ function buildHarness({
     },
     querySelectorAll(selector) {
       if (selector === 'button, [role="button"]') return [];
+      if (selector.includes('stop-button') || selector.includes('aria-label="Stop"')) {
+        return state.generating ? [stopButton] : [];
+      }
+      if (selector.includes('copy-turn-action-button')) {
+        return [...(state.completionMarkers ? [copyButton] : []), ...(selector.includes('data-message-author-role') && state.assistantContainers ? [responseElement] : [])];
+      }
       if (
         selector.includes('data-message-author-role')
         || selector.includes('copy-turn-action-button')
         || selector.includes('data-turn="assistant"')
       ) {
-        return state.completionMarkers ? [responseElement] : [];
+        return state.completionMarkers || state.assistantContainers ? [responseElement] : [];
       }
       return [];
     },
@@ -110,6 +143,7 @@ function buildHarness({
     },
     postMessage(message) {
       state.postedMessages.push(message);
+      windowListeners.get('message')?.({ source: window, data: message });
     },
   };
 
@@ -139,6 +173,7 @@ function buildHarness({
     Math,
     Promise,
     console,
+    URL,
     setTimeout(fn) {
       const id = nextTimer++;
       timerTasks.set(id, fn);
@@ -158,6 +193,7 @@ function buildHarness({
     location,
     attributes,
     sendButton,
+    stopButton,
     editor,
     documentListeners,
     windowListeners,
@@ -172,10 +208,15 @@ function buildHarness({
         for (const fn of tasks) fn();
       }
     },
-    streamEvent(type) {
+    installStreamBridge(response) {
+      window.fetch = async () => response;
+      vm.runInNewContext(fs.readFileSync('stream-bridge.js', 'utf8'), context, { filename: 'stream-bridge.js' });
+      return (...args) => window.fetch(...args);
+    },
+    streamEvent(type, cycleId) {
       const raw = attributes.get('data-ai-chat-notifier-cycle');
-      assert.ok(raw, 'response cycle attribute should exist');
-      const cycle = JSON.parse(raw);
+      assert.ok(raw || cycleId, 'response cycle attribute should exist');
+      const cycle = raw ? JSON.parse(raw) : { cycleId };
       const listener = windowListeners.get('message');
       assert.ok(listener, 'stream message listener should exist');
       listener({
@@ -217,6 +258,169 @@ run('clicking Send arms before a fast response and includes title preview and so
   assert.equal(h.state.sends[0].chatTitle, 'Geometry Homework');
   assert.equal(h.state.sends[0].snippet, 'Here is the finished AI response preview.');
   assert.equal(h.state.sends[0].sourceUrl, 'https://chatgpt.com/c/source-chat');
+});
+
+function unrelatedDialog(ariaLabel = '') {
+  const hasSelector = (selector, token) => selector.split(',').map(x => x.trim()).includes(token);
+  const editor = {
+    value: 'Feedback about this chat',
+    closest(selector) {
+      if (selector === 'form') return form;
+      return hasSelector(selector, 'textarea') ? this : null;
+    },
+  };
+  const button = {
+    disabled: false, textContent: 'Submit feedback',
+    getAttribute: name => name === 'aria-label' ? ariaLabel : null,
+    closest(selector) {
+      if (selector === 'form') return form;
+      return hasSelector(selector, 'button[type="submit"]') || hasSelector(selector, 'button')
+        || hasSelector(selector, 'button[aria-label="' + ariaLabel + '"]') ? this : null;
+    },
+  };
+  const form = {
+    querySelector(selector) {
+      if (hasSelector(selector, 'textarea')) return editor;
+      if (hasSelector(selector, 'button[type="submit"]')) return button;
+      return null;
+    },
+  };
+  return { editor, button, form };
+}
+
+for (const action of ['click', 'submit', 'keydown']) {
+  test('an unrelated nonempty dialog editor cannot arm a response through ' + action, () => {
+    const h = buildHarness();
+    const dialog = unrelatedDialog();
+    const target = action === 'click' ? dialog.button : action === 'submit' ? dialog.form : dialog.editor;
+    h.documentListeners.get(action)({ target, key: 'Enter' });
+    assert.equal(h.attributes.has('data-ai-chat-notifier-cycle'), false);
+  });
+}
+
+for (const label of ['Send', 'Send message', 'Send prompt']) {
+  test('a dialog button labelled ' + label + ' is not a chat submission', () => {
+    const h = buildHarness();
+    h.documentListeners.get('click')({ target: unrelatedDialog(label).button });
+    assert.equal(h.attributes.has('data-ai-chat-notifier-cycle'), false);
+  });
+}
+
+test('a Send label fallback within the real composer still detects a response', () => {
+  const h = buildHarness();
+  const button = {
+    disabled: false, textContent: '',
+    getAttribute: name => name === 'aria-label' ? 'Send' : null,
+    closest(selector) {
+      if (selector === 'form') return { querySelector: s => s.includes('prompt-textarea') ? h.editor : null };
+      return selector.split(',').map(s => s.trim()).includes('button[aria-label="Send"]') ? this : null;
+    },
+  };
+  h.documentListeners.get('click')({ target: button });
+  h.state.hidden = true;
+  h.state.completionMarkers = 1;
+  h.mutate();
+  h.flushTimers();
+  assert.equal(h.state.sends.length, 1);
+});
+
+for (const starter of ['/g/project-id/project', '/g/custom-gpt']) {
+  test('a visible new chat adopts its assigned conversation from ' + starter, () => {
+    const h = buildHarness({ pathname: starter, href: 'https://chatgpt.com' + starter });
+    h.documentListeners.get('click')({ target: h.sendButton });
+    h.streamEvent('STREAM_TRACKING');
+    const prefix = starter.replace(/\/project$/, '');
+    h.location.pathname = prefix + '/c/new-assigned';
+    h.location.href = 'https://chatgpt.com' + h.location.pathname;
+    h.mutate();
+    h.state.completionMarkers = 1;
+    h.streamEvent('STREAM_DONE');
+    h.flushTimers();
+    assert.equal(h.state.sends.length, 0);
+  });
+
+  test('navigating to an existing chat from ' + starter + ' keeps tracking the original response', () => {
+    const h = buildHarness({ pathname: starter, href: 'https://chatgpt.com' + starter });
+    h.documentListeners.get('click')({ target: h.sendButton });
+    h.streamEvent('STREAM_TRACKING');
+    const destination = starter.replace(/\/project$/, '') + '/c/other-chat';
+    const link = { href: 'https://chatgpt.com' + destination };
+    h.documentListeners.get('click')({ target: {
+      closest: selector => selector === 'a[href]' ? link : null,
+    } });
+    h.location.pathname = destination;
+    h.location.href = link.href;
+    h.mutate();
+    h.streamEvent('STREAM_DONE');
+    h.flushTimers();
+    assert.equal(h.state.sends.length, 1);
+    assert.equal(h.state.sends[0].sourceUrl, 'https://chatgpt.com' + starter);
+  });
+}
+
+for (const action of [
+  { name: 'Ctrl-click', ctrlKey: true },
+  { name: 'Cmd-click', metaKey: true },
+  { name: 'Shift-click', shiftKey: true },
+  { name: 'middle-click', button: 1 },
+  { name: 'a new-tab link', target: '_blank' },
+  { name: 'a download link', download: true },
+  { name: 'an external link', href: 'https://example.test/' },
+]) {
+  test(action.name + ' cannot prevent a new project chat adopting its assigned address', () => {
+    const h = buildHarness({ pathname: '/g/project-id/project', href: 'https://chatgpt.com/g/project-id/project' });
+    h.documentListeners.get('click')({ target: h.sendButton });
+    h.streamEvent('STREAM_TRACKING');
+    const link = {
+      href: action.href || 'https://chatgpt.com/g/project-id/c/other-chat',
+      getAttribute: name => name === 'target' ? action.target || '' : null,
+      hasAttribute: name => name === 'download' && Boolean(action.download),
+    };
+    h.documentListeners.get('click')({ ...action, target: {
+      closest: selector => selector === 'a[href]' ? link : null,
+    } });
+    h.location.pathname = '/g/project-id/c/new-assigned';
+    h.location.href = 'https://chatgpt.com/g/project-id/c/new-assigned';
+    h.mutate();
+    h.streamEvent('STREAM_DONE');
+    h.flushTimers();
+    assert.equal(h.state.sends.length, 0);
+  });
+}
+
+test('stopping the source response cancels even when the native cloned stream closes normally', async () => {
+  const h = buildHarness();
+  let controller;
+  const response = new Response(new ReadableStream({ start(value) { controller = value; } }), {
+    headers: { 'Content-Type': 'text/event-stream' },
+  });
+  const fetch = h.installStreamBridge(response);
+  h.documentListeners.get('click')({ target: h.sendButton });
+  const result = await fetch('https://chatgpt.com/backend-api/conversation', { method: 'POST' });
+  assert.ok(h.state.postedMessages.some(x => x.type === 'STREAM_TRACKING'));
+  h.state.generating = true;
+  h.documentListeners.get('click')({ target: h.stopButton });
+  void result.body.getReader().cancel('user clicked Stop');
+  h.mutate();
+  assert.equal(h.attributes.has('data-ai-chat-notifier-cycle'), false, 'remaining Stop control must not re-arm');
+  h.state.hidden = true;
+  h.state.generating = false;
+  controller.close();
+  await new Promise(resolve => setImmediate(resolve));
+  h.flushTimers();
+  assert.equal(h.state.sends.length, 0);
+});
+
+test('stopping another conversation does not cancel the original response', () => {
+  const h = buildHarness();
+  h.documentListeners.get('click')({ target: h.sendButton });
+  h.streamEvent('STREAM_TRACKING');
+  h.location.pathname = '/c/other-chat';
+  h.location.href = 'https://chatgpt.com/c/other-chat';
+  h.documentListeners.get('click')({ target: h.stopButton });
+  h.streamEvent('STREAM_DONE');
+  h.flushTimers();
+  assert.equal(h.state.sends.length, 1);
 });
 
 run('pressing Enter in the prompt editor also arms the response cycle', () => {
@@ -282,4 +486,90 @@ run('a newly created chat can adopt its assigned conversation URL during generat
 
   assert.equal(h.state.sends.length, 1);
   assert.equal(h.state.sends[0].sourceUrl, 'https://chatgpt.com/c/newly-assigned');
+});
+
+test('a delete dialog submit button does not arm a response cycle', () => {
+  const h = buildHarness();
+  const button = {
+    textContent: 'Delete',
+    disabled: false,
+    getAttribute() { return null; },
+    closest(selector) { return selector.includes('button[type="submit"]') ? this : null; },
+  };
+  h.documentListeners.get('click')({ target: button });
+  assert.equal(h.attributes.has('data-ai-chat-notifier-cycle'), false);
+});
+
+test('submitting a delete form does not arm a response cycle', () => {
+  const h = buildHarness();
+  const button = { disabled: false, getAttribute: () => null };
+  h.documentListeners.get('submit')({ target: {
+    querySelector: (selector) => selector.includes('button[type="submit"]') ? button : null,
+  } });
+  assert.equal(h.attributes.has('data-ai-chat-notifier-cycle'), false);
+});
+
+test('an assistant container appearing at response start is not completion', () => {
+  const h = buildHarness();
+  h.documentListeners.get('click')({ target: h.sendButton });
+  h.state.hidden = true;
+  h.state.assistantContainers = 1;
+  h.mutate();
+  h.flushTimers();
+  assert.equal(h.state.sends.length, 0);
+});
+
+test('DOM changes cannot finish a response whose network stream is still running', () => {
+  const h = buildHarness();
+  h.documentListeners.get('click')({ target: h.sendButton });
+  h.streamEvent('STREAM_TRACKING');
+  h.state.hidden = true;
+  h.state.completionMarkers = 1;
+  h.mutate();
+  h.flushTimers();
+  assert.equal(h.state.sends.length, 0);
+  h.streamEvent('STREAM_DONE');
+  h.flushTimers();
+  assert.equal(h.state.sends.length, 1);
+});
+
+test('a cancelled stream clears its cycle without alerting', () => {
+  const h = buildHarness();
+  h.documentListeners.get('click')({ target: h.sendButton });
+  h.streamEvent('STREAM_TRACKING');
+  h.state.hidden = true;
+  h.streamEvent('STREAM_CANCELLED');
+  h.state.completionMarkers = 1;
+  h.mutate();
+  h.flushTimers();
+  assert.equal(h.state.sends.length, 0);
+  assert.equal(h.attributes.has('data-ai-chat-notifier-cycle'), false);
+});
+
+test('a visible chat stays quiet when ChatGPT moves it into a project route', () => {
+  const h = buildHarness();
+  h.documentListeners.get('click')({ target: h.sendButton });
+  h.streamEvent('STREAM_TRACKING');
+  h.location.pathname = '/g/project-id/c/source-chat';
+  h.location.href = 'https://chatgpt.com/g/project-id/c/source-chat';
+  h.state.completionMarkers = 1;
+  h.streamEvent('STREAM_DONE');
+  h.flushTimers();
+  assert.equal(h.state.sends.length, 0);
+});
+
+test('stream completion waits for the source chat to stop generating', () => {
+  const h = buildHarness();
+  h.documentListeners.get('click')({ target: h.sendButton });
+  h.streamEvent('STREAM_TRACKING');
+  h.state.hidden = true;
+  h.state.generating = true;
+  h.streamEvent('STREAM_DONE');
+  h.flushTimers();
+  assert.equal(h.state.sends.length, 0);
+  h.state.generating = false;
+  h.state.completionMarkers = 1;
+  h.mutate();
+  h.flushTimers();
+  assert.equal(h.state.sends.length, 1);
 });

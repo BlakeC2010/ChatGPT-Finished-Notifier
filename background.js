@@ -1,8 +1,9 @@
 'use strict';
 
-importScripts('background-core.js');
+importScripts('background-core.js', 'providers.js');
 
 const core = globalThis.ChatGPTNotifierBackgroundCore;
+const providers = globalThis.AIChatProviderProfiles;
 const GENERIC_NOTIFICATION_ICON = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAIAAAACACAYAAADDPmHLAAADNElEQVR42u3dO1IbQRRGYU2XlsGjxAIcE5J7EU7Zhcu7IPUinCsk9gJM+bEPHBHYhaTRqKdf9zsRVYDQ9H/u7Yc0YrMBAAAAAARiKv0Hr252r4b9MH9+vUxDCSDwtoWYBB9bhEnwsUWYBB9bhCT8Psk15kn4sSVIwo8tQRJ+bAmS8GNLkIQfW4Ik/NgSJEMWm6T6Y3cBHUAHUP2Ru8DWUK3Hh/2ng9/7/vC1iec4qf5yodeQ4dSLRgSoGHwJEU4JYBHYSPg5H8c5QIfh15Igaf/thZXzcU9lqAM0WqmlOgEBGg6nxN8hQAM8Pzy1eQ5gDbB+Vf4f/v3+Mfv28NhWUAdorPKfH56KdoTwAvz++aO55/ReFzAFFAz8+vZu9fZ/qMoPhX/JNHBsCtiq7nm/d0iK3hZ9YaaA3K19zuPNCfbYz5Rs/UMLUGNefwt2aXXXCH9IAWqGf6rKz533CXBm8LVW9O8FOFcKa4BBtnLHJGht3h9qG1g6/I8vX7Kt8OeG7ySw4cpfGmrtyh9+G9iDBATosPq/7T5fLME5gqz97mEdoEAnuN8//vN1S3S7CKw9/59aDOYgV/UPtwhsYfE3dyqoHb4poEMJSt41lFR/WxKUvmVMB2hIghr3C7o5NLMESxaHNW8U7WoX0OLJ3yGub++auTs47DuCatPKLeDWACAACAACgAAgAAgAAoAAIAABQAAQAAQAARqmp/cC9PR8dQAdQDVFft5bA1jmGnJ+xlCIDjBC+D1cTzJYsa8rGaTY12cXYBcAAoAAIEATtLpfHvX6kkGKfV3JYMW+nm20Qbvk/wVYA3TO3EOY0Q+jQgpwbqhRJLANtA1U/ZG7gA6gA4AAIAAIMCxLD3YiHAjpADpADM6t5ijHwaE6wNxQI70WEO6TQt/CXfv/AxNg0IWhKQAEQBABjn3MOPrgVIY6gA4AAoAA1gHx5n8dAPME0AXGrH4dAPMF0AXGq34dAOcJoAuMVf2LOgAJxgl/8RRAgjHCv2gNQIL+w794EUiCvsPPsgsgQb/hZ9sGkqDP8DebzSZ7cFc3u1fxtB/8agIQoY/gVxeACG0HX0wAQlhPAQAAAACa4S9ZFnZODus74AAAAABJRU5ErkJggg==';
 const KNOWN_PROVIDERS = new Set(['ChatGPT', 'Claude', 'Gemini']);
 const SUPPORTED_URL_PATTERNS = [
@@ -171,7 +172,7 @@ function notificationCopy(data) {
   return { title, message };
 }
 
-function createSystemNotification(tabId, completionId, data, callback) {
+function createSystemNotification(tabId, completionId, data, callback, beforeDisplay) {
   let notificationId;
   try {
     notificationId = core.makeNotificationId(tabId, completionId);
@@ -186,19 +187,21 @@ function createSystemNotification(tabId, completionId, data, callback) {
     : 'Click to open chat';
 
   const createWithIcon = (iconUrl, allowFallback) => {
-    chrome.notifications.create(notificationId, {
-      type: 'basic',
-      iconUrl,
-      title: copy.title,
-      message: copy.message,
-      contextMessage,
-      buttons: [{ title: 'Open chat' }],
-    }, () => {
-      if (chrome.runtime.lastError && allowFallback) {
-        createWithIcon(GENERIC_NOTIFICATION_ICON, false);
-        return;
-      }
-      callback(!chrome.runtime.lastError);
+    beforeDisplay(() => {
+      chrome.notifications.create(notificationId, {
+        type: 'basic',
+        iconUrl,
+        title: copy.title,
+        message: copy.message,
+        contextMessage,
+        buttons: [{ title: 'Open chat' }],
+      }, () => {
+        if (chrome.runtime.lastError && allowFallback) {
+          createWithIcon(GENERIC_NOTIFICATION_ICON, false);
+          return;
+        }
+        callback(!chrome.runtime.lastError);
+      });
     });
   };
 
@@ -209,7 +212,7 @@ function createSystemNotification(tabId, completionId, data, callback) {
   });
 }
 
-function showInlineToastInTab(activeTabId, sourceTabId, data, callback) {
+function showInlineToastInTab(activeTabId, sourceTabId, data, callback, beforeDisplay) {
   chrome.scripting.executeScript({
     target: { tabId: activeTabId },
     files: ['overlay.js'],
@@ -219,22 +222,24 @@ function showInlineToastInTab(activeTabId, sourceTabId, data, callback) {
       return;
     }
 
-    chrome.tabs.sendMessage(activeTabId, {
-      type: 'SHOW_INLINE_TOAST',
-      sourceTabId,
-      provider: data.provider,
-      chatTitle: data.chatTitle,
-      snippet: data.snippet,
-      sourceTheme: data.sourceTheme,
-      sourceUrl: data.sourceUrl,
-    }, (response) => {
-      const ok = !chrome.runtime.lastError && response && response.ok === true;
-      callback(Boolean(ok));
+    beforeDisplay(() => {
+      chrome.tabs.sendMessage(activeTabId, {
+        type: 'SHOW_INLINE_TOAST',
+        sourceTabId,
+        provider: data.provider,
+        chatTitle: data.chatTitle,
+        snippet: data.snippet,
+        sourceTheme: data.sourceTheme,
+        sourceUrl: data.sourceUrl,
+      }, (response) => {
+        const ok = !chrome.runtime.lastError && response && response.ok === true;
+        callback(Boolean(ok));
+      });
     });
   });
 }
 
-function createInlineToast(sourceTabId, data, focusedWindow, callback) {
+function createInlineToast(sourceTabId, data, focusedWindow, callback, beforeDisplay) {
   if (!focusedWindow || !Number.isInteger(focusedWindow.id)) {
     callback(false);
     return;
@@ -252,12 +257,38 @@ function createInlineToast(sourceTabId, data, focusedWindow, callback) {
       return;
     }
 
-    showInlineToastInTab(activeTab.id, sourceTabId, data, callback);
+    showInlineToastInTab(activeTab.id, sourceTabId, data, callback, beforeDisplay);
   });
 }
 
-function deliverNotification(tabId, completionId, requestedMode, rawData, callback) {
+function deliverNotification(tabId, completionId, requestedMode, rawData, callback, checkSourceVisibility = false) {
   const data = notificationData(rawData);
+  const beforeDisplay = (show) => {
+    if (!checkSourceVisibility) {
+      show();
+      return;
+    }
+    // Recheck after asynchronous setup, immediately before displaying an alert.
+    chrome.windows.getAll({ windowTypes: ['normal'] }, (windows) => {
+      const normalWindows = Array.isArray(windows) ? windows : [];
+      chrome.tabs.get(tabId, (sourceTab) => {
+        // A handled suppression must be acknowledged so stale retries stay quiet.
+        if (chrome.runtime.lastError || !sourceTab) {
+          callback(true);
+          return;
+        }
+        const sourceWindow = normalWindows.find((windowInfo) => windowInfo.id === sourceTab.windowId);
+        const currentKey = providers.conversationKeyFromUrl(sourceTab.url);
+        const sourceKey = providers.conversationKeyFromUrl(data.sourceUrl);
+        const sameChat = currentKey && (!sourceKey || currentKey === sourceKey);
+        if (sourceTab.active && sourceWindow && sourceWindow.state !== 'minimized' && sameChat) {
+          callback(true);
+          return;
+        }
+        show();
+      });
+    });
+  };
 
   chrome.storage.sync.get({ notificationMode: 'auto' }, (settings) => {
     const storedMode = settings && settings.notificationMode;
@@ -266,21 +297,22 @@ function deliverNotification(tabId, completionId, requestedMode, rawData, callba
     chrome.windows.getAll({ windowTypes: ['normal'] }, (windows) => {
       const normalWindows = Array.isArray(windows) ? windows : [];
       const focusedWindow = normalWindows.find((windowInfo) => windowInfo.focused) || null;
-      const deliveryMode = core.chooseDeliveryMode(mode, Boolean(focusedWindow));
+      const deliver = () => {
+        const deliveryMode = core.chooseDeliveryMode(mode, Boolean(focusedWindow));
+        if (deliveryMode === 'browser') {
+          createInlineToast(tabId, data, focusedWindow, (ok) => {
+            if (ok) {
+              callback(true);
+              return;
+            }
+            createSystemNotification(tabId, completionId, data, callback, beforeDisplay);
+          }, beforeDisplay);
+          return;
+        }
+        createSystemNotification(tabId, completionId, data, callback, beforeDisplay);
+      };
 
-      if (deliveryMode === 'browser') {
-        createInlineToast(tabId, data, focusedWindow, (ok) => {
-          if (ok) {
-            callback(true);
-            return;
-          }
-
-          createSystemNotification(tabId, completionId, data, callback);
-        });
-        return;
-      }
-
-      createSystemNotification(tabId, completionId, data, callback);
+      beforeDisplay(deliver);
     });
   });
 }
@@ -350,7 +382,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     snippet: message.snippet,
     sourceTheme: message.sourceTheme,
     sourceUrl: message.sourceUrl,
-  }, (ok) => sendResponse({ ok }));
+  }, (ok) => sendResponse({ ok }), true);
 
   return true;
 });

@@ -34,7 +34,6 @@ assert.ok(gemini.send.some((selector) => selector.includes('Send message')));
 assert.ok(gemini.generating.some((selector) => selector.includes('aria-busy')));
 assert.ok(gemini.completion.some((selector) => selector.includes('model-response')));
 assert.ok(gemini.completion.some((selector) => selector.includes('Copy')));
-assert.ok(chatgpt.completion.some((selector) => selector.includes('data-message-author-role')));
 assert.ok(chatgpt.responseText.some((selector) => selector.includes('data-message-author-role')));
 assert.ok(claude.responseText.some((selector) => selector.includes('font-claude-response')));
 assert.ok(gemini.responseText.some((selector) => selector.includes('message-content')));

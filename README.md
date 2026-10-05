@@ -30,4 +30,10 @@ The extension runs locally. It does not send prompts or responses to an external
 
 ## Reliability
 
+Version 1.4.1 fixes early and unwanted ChatGPT alerts. Setup and management requests are excluded from response-stream tracking, unrelated dialog submissions do not arm the detector, stopped and cancelled responses are discarded, and delivery rechecks whether the original chat is visible immediately before display. New project and custom-GPT chats adopt their assigned conversation address. The detector waits for an owned stream to finish instead of treating an assistant container appearing as completion.
+
 Version 1.4.0 adds toolbar popup settings, provider-branded notification icons, exact-chat return routing, stronger ChatGPT/Gemini response previews, and page-world stream tracking so Claude, Gemini, and ChatGPT can still notify after you switch to another chat while a response is generating. Claude and Gemini use provider-specific prompt, send, stop/streaming, and completion selectors with generic fallbacks. The hidden-tab behavior, delivery retries, notification modes, and exact-tab return behavior are preserved.
+
+## Test and package
+
+Run `node --test` for the full test suite. The reusable test and package workflows execute on the Windows Z-server runner through the existing `ChatGPT-Repo-Creator` control repository. The package job verifies the source before uploading the extension ZIP; it does not use a hosted build runner.

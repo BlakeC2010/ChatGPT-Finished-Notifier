@@ -5,7 +5,7 @@ const fs = require('node:fs');
 
 const manifest = JSON.parse(fs.readFileSync('manifest.json', 'utf8'));
 assert.equal(manifest.name, 'AI Chat Notifications');
-assert.equal(manifest.version, '1.4.0');
+assert.match(manifest.version, /^\d+\.\d+\.\d+$/);
 assert.equal(manifest.description, 'Get notified when ChatGPT, Claude, or Gemini finishes responding.');
 assert.ok(manifest.permissions.includes('notifications'));
 assert.ok(manifest.permissions.includes('storage'));
@@ -33,7 +33,7 @@ assert.equal(streamEntry.run_at, 'document_start');
 
 const detectorEntry = manifest.content_scripts.find((entry) => (entry.js || []).includes('providers.js'));
 assert.ok(detectorEntry, 'AI response detector content script is missing');
-console.log('PASS manifest exposes v1.4.0 detection, stream tracking, popup settings, and on-demand overlays');
+console.log('PASS manifest exposes v' + manifest.version + ' detection, stream tracking, popup settings, and on-demand overlays');
 
 const welcome = fs.readFileSync('welcome.html', 'utf8');
 for (const mode of ['auto', 'browser', 'system']) {
